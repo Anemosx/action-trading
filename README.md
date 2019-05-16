@@ -1,3 +1,3 @@
 # wicksellian-triangle
 
-An repository to study complexity economics with means of multi-agent reinforcement learningarthur.pdf 
+A repository to study complexity economics with means of multi-agent reinforcement learningarthur.pdf 
