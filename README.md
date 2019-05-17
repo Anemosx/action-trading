@@ -6,7 +6,7 @@
 ## Multi-Agent Reinforcement Learning: 
  - https://github.com/LantaoYu/MARL-Papers
 
-##Interesting starting points:
+## Interesting starting points:
  ### Quick recessions vs. slow recoveries
  Business cycles are not symmetric; if you flipped the time-series data upside-down the fluctuations would look different. Recessions are usually quick; recoveries are usually slow.
  This phenomenon can be explained through a excess demand for money within a simple model of a monetary exchange economy.
