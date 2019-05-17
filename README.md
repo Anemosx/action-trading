@@ -18,7 +18,7 @@
   - Can the Wicksellian-Triangle be modeled as a MARL-learning problem?
   - Will MARL agents eventually learn to trade multilaterally?
   - Emergent usage of money?
-  - What are the potential driver for an excess demand for money if the preference for holding money is part of the 
+  - What are the potential drivers for an excess demand for money if the preference for holding money is part of the 
   learning problem?
         
  
