@@ -46,7 +46,6 @@ def add_line_with_points(display_objects, position, name, drawing_layer, color, 
                                                     color=color))
 
 
-
 class Camera(object):
     def __init__(self, pos, fov_dims, control_gain=10.0, control_damp=5.0):
         """
@@ -190,7 +189,7 @@ class Line(DisplayableObject):
         shape.draw(surface)
 
 
-def render_visual_state(state, pixels_per_worldunit, bg_color=(0.3, 0.3, 0.3)) -> np.ndarray:
+def render_visual_state(state, info_values, pixels_per_worldunit, bg_color=(0.3, 0.3, 0.3)) -> np.ndarray:
     """
     Converts a 'visual state' to a rendered image
 
@@ -209,46 +208,56 @@ def render_visual_state(state, pixels_per_worldunit, bg_color=(0.3, 0.3, 0.3)) -
     for _, display_object in sorted(state['display_objects'].values(), key=lambda t: t[0]):
         display_object.draw(surface, state['camera'], pixels_per_worldunit)
 
-    img = surface.get_npimage()
-    # img = img[75:325, 0:275]
-    # img = img[100:300, 65:265]
-    return img
-
-
-def render_visual_state_with_information(state, info_values, pixels_per_worldunit, bg_color=(0.3, 0.3, 0.3)) -> np.ndarray:
-    """
-    Converts a 'visual state' to a rendered image
-
-    :param state: dict with entries 'display_objects' (iterable of tuples (int, DisplayableObject)) and 'camera'
-    :param pixels_per_worldunit: number of rendered pixels per world unit
-    :param bg_color: background-color-tuple (r,g,b)
-    :return: rendered image as 3D-numpy array
-    """
-    width, height = state['camera'].get_img_dims(pixels_per_worldunit)
-
-    # Ensure that output image has dimensions as a multiple of 10 (video player compatibility)
-    surface = gizeh.Surface(int(np.ceil(width/10))*10,
-                            int(np.ceil(height/10))*10, bg_color + (1.,))
-
-    # The elements of state['display_objects'] have the drawing order as their first entry
-    for _, display_object in sorted(state['display_objects'].values(), key=lambda t: t[0]):
-        display_object.draw(surface, state['camera'], pixels_per_worldunit)
-
-    vertical_spacing = 12
-    j = 0
-    for i, (key, value) in enumerate(info_values.items()):
-        if isinstance(value, (float)):
-            text = gizeh.text('{0}: {1:.4}'.format(key, value), fontfamily="Helvetica", fontsize=36,
-                            fill=(1, 1, 1), xy=(10, (j + 1.0) * vertical_spacing), angle=0, h_align='left')
-            j += 1
-            text.draw(surface)
-        if isinstance(value, (int)):
-            text = gizeh.text('{0}: {1}'.format(key, value), fontfamily="Helvetica", fontsize=36,
-                              fill=(1, 1, 1), xy=(10, (j + 1.0) * vertical_spacing), angle=0, h_align='left')
-            j += 1
-
+    if info_values is not None:
+        vertical_spacing = 12
+        horizontal_spacing = 220
+        keys = []
+        j = 0
+        k = 0
+        for info_value in info_values:
+            for i, (key, value) in enumerate(info_value.items()):
+                if key in keys:
+                    keys = []
+                    k = 1
+                    j = 0
+                if isinstance(value, (float, np.float32)):
+                    text = gizeh.text('{0}: {1:.4}'.format(key, value), fontfamily="Helvetica", fontsize=12,
+                                      fill=(1, 1, 1), xy=(10 + (k*horizontal_spacing),
+                                                          12 + (j + 1.0) * vertical_spacing), angle=0, h_align='left')
+                    j += 1
+                    text.draw(surface)
+                if isinstance(value, (int, np.int64)):
+                    text = gizeh.text('{0}: {1}'.format(key, value), fontfamily="Helvetica", fontsize=12,
+                                      fill=(1, 1, 1), xy=(10 + (k*horizontal_spacing),
+                                                          12 + (j + 1.0) * vertical_spacing), angle=0, h_align='left')
+                    j += 1
+                    text.draw(surface)
+                keys.append(key)
     img = surface.get_npimage()
     return img
+
+
+def render_all_agents(env, info_values, dist_frames=None, observations=None):
+
+    frames = []
+    if info_values is not None:
+        frames.append(env.render(mode='rgb_array', info_values=info_values))
+    else:
+        frames.append(env.render(mode='rgb_array'))
+
+    obs = render_observations(env.camera, env.pixels_per_worldunit, observations)
+    frames.append(obs)
+
+    if dist_frames is not None:
+        frame_ag0 = np.append(frames[0], dist_frames[0], axis=1)
+        frame_ag1 = np.append(frames[1], dist_frames[1], axis=1)
+    else:
+        frame_ag0 = frames[0]
+        frame_ag1 = frames[1]
+
+    frame_combined = np.append(frame_ag0, frame_ag1, axis=0)
+
+    return frame_combined
 
 
 def render_observations(camera, pixels_per_worldunit, observations, bg_color=(0.5, 0.5, 0.5)) -> np.ndarray:
@@ -285,36 +294,3 @@ def render_observations(camera, pixels_per_worldunit, observations, bg_color=(0.
         img[xs[i][0]:xs[i][1], xs[i][2]:xs[i][3]] = obs
 
     return img
-
-
-def render_all_agents(env, info_values, dist_frames=None, observations=None):
-
-    frames = []
-    if info_values is not None:
-        frames.append(env.render(mode='rgb_array', info_values=info_values[0]))
-    else:
-        frames.append(env.render(mode='rgb_array'))
-
-    obs = render_observations(env.camera, env.pixels_per_worldunit, observations)
-    frames.append(obs)
-
-    if dist_frames is not None:
-        frame_ag0 = np.append(frames[0], dist_frames[0], axis=1)
-        frame_ag1 = np.append(frames[1], dist_frames[1], axis=1)
-    else:
-        frame_ag0 = frames[0]
-        frame_ag1 = frames[1]
-
-    frame_combined = np.append(frame_ag0, frame_ag1, axis=0)
-
-    return frame_combined
-
-
-def render_info(info_value, shape):
-    vertical_spacing = 22
-    surface = gizeh.Surface(width=shape[1], height=shape[0])
-    for i, (key, value) in enumerate(info_value.items()):
-        text = gizeh.text('{0}: {1:.4}'.format(key, value), fontfamily="Helvetica", fontsize=18,
-                              fill=(1, 1, 1), xy=(10, (i + 0.5)*vertical_spacing), angle=0, h_align='left')
-        text.draw(surface)
-    return surface.get_npimage()

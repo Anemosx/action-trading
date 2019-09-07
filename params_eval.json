@@ -1,0 +1,13 @@
+{"nb_steps": 10000,
+  "memory_limit": 10000,
+  "eps_val_max": 1.0,
+  "eps_val_min": 0.3,
+  "eps_val_test": 0.05,
+  "nb_steps_warmup": 500,
+  "target_update": 200,
+  "gamma": 0.99,
+  "input_shape": [84, 84, 3],
+  "field_width": 5,
+  "field_height": 5,
+  "nb_learners": 2,
+  "rewards": [1, 5]}
