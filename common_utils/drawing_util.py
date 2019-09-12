@@ -214,25 +214,20 @@ def render_visual_state(state, info_values, pixels_per_worldunit, bg_color=(0.3,
         keys = []
         j = 0
         k = 0
-        for info_value in info_values:
-            for i, (key, value) in enumerate(info_value.items()):
-                if key in keys:
-                    keys = []
-                    k = 1
-                    j = 0
-                if isinstance(value, (float, np.float32)):
-                    text = gizeh.text('{0}: {1:.4}'.format(key, value), fontfamily="Helvetica", fontsize=12,
-                                      fill=(1, 1, 1), xy=(10 + (k*horizontal_spacing),
-                                                          12 + (j + 1.0) * vertical_spacing), angle=0, h_align='left')
-                    j += 1
-                    text.draw(surface)
-                if isinstance(value, (int, np.int64)):
-                    text = gizeh.text('{0}: {1}'.format(key, value), fontfamily="Helvetica", fontsize=12,
-                                      fill=(1, 1, 1), xy=(10 + (k*horizontal_spacing),
-                                                          12 + (j + 1.0) * vertical_spacing), angle=0, h_align='left')
-                    j += 1
-                    text.draw(surface)
-                keys.append(key)
+        for i, (key, value) in enumerate(info_values.items()):
+            if isinstance(value, (float, np.float32)):
+                text = gizeh.text('{0}: {1:.4}'.format(key, value), fontfamily="Helvetica", fontsize=12,
+                                  fill=(1, 1, 1), xy=(10 + (k*horizontal_spacing),
+                                                      12 + (j + 1.0) * vertical_spacing), angle=0, h_align='left')
+                j += 1
+                text.draw(surface)
+            if isinstance(value, (int, np.int64)):
+                text = gizeh.text('{0}: {1}'.format(key, value), fontfamily="Helvetica", fontsize=12,
+                                  fill=(1, 1, 1), xy=(10 + (k*horizontal_spacing),
+                                                      12 + (j + 1.0) * vertical_spacing), angle=0, h_align='left')
+                j += 1
+                text.draw(surface)
+            keys.append(key)
     img = surface.get_npimage()
     return img
 

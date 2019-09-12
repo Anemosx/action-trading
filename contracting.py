@@ -1,25 +1,22 @@
 import numpy as np
 from copy import deepcopy
-from envs.MAWicksellianTriangle import MAWicksellianTriangle
+from envs.smartfactory import Smartfactory
 from common_utils.utils import export_video
 from agent import build_agent
-from collections import deque
 from dotmap import DotMap
 import json
 import scipy
 
-ONE_CONTRACTING_ACTION = 'ONE_CONTRACTING_ACTION'
-TWO_CONTRACTING_ACTIONS = 'TWO_CONTRACTING_ACTIONS'
-
 
 class Contract:
 
-    def __init__(self, agent_1, agent_2):
+    def __init__(self, agent_1, agent_2, contracting_actions=1):
         self.agent_1 = agent_1
         self.agent_2 = agent_2
         self.agents = [agent_1, agent_2]
+        self.contracting_actions = contracting_actions
 
-    def find_contract(self, env, actions, observations, modus=TWO_CONTRACTING_ACTIONS):
+    def find_contract(self, env, actions, observations, modus=2):
         """
         This method decides on whether contracting takes places and returns a list
         of actions that should be executed and the compensation for agents under contracting
@@ -140,23 +137,42 @@ class Contract:
 
         return list(plan), compensations
 
-    def check_contracting(self, env, actions):
+    def check_contracting(self, env, actions, observations):
 
         greedy = [False, False]
         contracting = False
-        if env.actions[actions[0]][2] == 1 and env.actions[actions[1]][3] == 1:
-            contracting = True
-            greedy[1] = True
-        if env.actions[actions[0]][3] == 1 and env.actions[actions[1]][2] == 1:
-            contracting = True
-            greedy[0] = True
+
+        if self.contracting_actions == 1:
+            if env.actions[actions[0]][2] == 1 and env.actions[actions[1]][2] == 1:
+                contracting = True
+                q_vals = [np.max(self.agents[i_agent].compute_q_values(observations[i_agent]))
+                          for i_agent in range(len(self.agents))]
+                if q_vals[0] > q_vals[1]:
+                    greedy[0] = True
+                if q_vals[1] > q_vals[0]:
+                    greedy[1] = True
+                if q_vals[0] == q_vals[1]:
+                    i_agent = np.random.randint(0, len(self.agents))
+                    greedy[i_agent] = True
+
+        if self.contracting_actions == 2:
+            if env.actions[actions[0]][2] == 1 and env.actions[actions[1]][3] == 1:
+                contracting = True
+                greedy[1] = True
+            if env.actions[actions[0]][3] == 1 and env.actions[actions[1]][2] == 1:
+                contracting = True
+                greedy[0] = True
+
+        assert any(i == False for i in greedy)
 
         return contracting, greedy
 
     def contracting_n_steps(self, env, observations, greedy, frames=None, info_values=None):
 
         nb_contracting_steps = 10
-        mark_up = 2
+        mark_up = 1.3 #1.7 #2.0 # 1.8
+
+        env.contract = True
 
         compensations = np.zeros(2)
         for i_agent, agent in enumerate(self.agents):
@@ -174,6 +190,7 @@ class Contract:
                     q_vals = self.agents[i_agent].compute_q_values(observations[i_agent])
                     c_actions.append(np.argmin(q_vals))
 
+
             observations, r, done, info = env.step(c_actions)
             observations = deepcopy(observations)
 
@@ -190,13 +207,16 @@ class Contract:
             if done:
                 break
 
+        env.contract = False
+
         return observations, r, done, info, compensations
 
     @staticmethod
     def get_compensated_rewards(agents, rewards, episode_compensations):
 
+        transfer = [0, 0]
         if np.count_nonzero(episode_compensations) == 0 or (rewards <= 0).all():
-            return rewards, episode_compensations
+            return rewards, episode_compensations, transfer
         else:
             # clear compensation with each other
             if episode_compensations[0] > 0 and episode_compensations[1] > 0:
@@ -205,7 +225,6 @@ class Contract:
                 episode_compensations = [diff_a1, diff_a2]
 
             r = [0, 0]
-            transfer = [0, 0]
             for i, agent in enumerate(agents):
                 if episode_compensations[i] > 0:
                     if rewards[i] <= 0:
@@ -219,7 +238,7 @@ class Contract:
 
             r[0] += rewards[0] - transfer[0] + transfer[1]
             r[1] += rewards[1] - transfer[1] + transfer[0]
-        return r, episode_compensations
+        return r, episode_compensations, transfer
 
 
 def main():
@@ -227,12 +246,13 @@ def main():
         params_json = json.load(f)
     params = DotMap(params_json)
 
-    env = MAWicksellianTriangle(nb_agents=params.nb_learners,
-                                field_width=params.field_width,
-                                field_height=params.field_height,
-                                rewards=params.rewards,
-                                contracting=True)
-    processor = env.MAWicksellianTriangleProcessor()
+    env = Smartfactory(nb_agents=params.nb_learners,
+                       field_width=params.field_width,
+                       field_height=params.field_height,
+                       rewards=params.rewards,
+                       contracting=True)
+
+    processor = env.SmartfactoryProcessor()
 
     params.nb_actions = env.nb_actions
     episodes = 10
@@ -243,8 +263,8 @@ def main():
     for i in range(2):
         agent = build_agent(params=params, processor=processor)
         contracting_agents.append(agent)
-    contracting_agents[0].load_weights('logs/20190905-15-47-42/contracting-False/dqn_weights-agent-0.h5f')
-    contracting_agents[1].load_weights('logs/20190905-15-47-42/contracting-False/dqn_weights-agent-1.h5f')
+    contracting_agents[0].load_weights('logs/20190907-20-27-10/contracting-False/dqn_weights-agent-0.h5f')
+    contracting_agents[1].load_weights('logs/20190907-20-27-10/contracting-False/dqn_weights-agent-1.h5f')
     contract = Contract(agent_1=contracting_agents[0], agent_2=contracting_agents[1])
     params.nb_actions = 12
 
@@ -258,9 +278,10 @@ def main():
 
         observations = env.reset()
         episode_compensations = np.zeros(2)
+        accumulated_transfer = np.zeros(2)
         plan = []
         info_values = [{'reward': 0.0,
-                        'agent_comp': episode_compensations[i],
+                        'accumulated_transfer': accumulated_transfer[i],
                         'contracting': len(plan),
                         'a{}_greedy'.format(i): -1,
                         } for i in range(env.nb_agents)]
@@ -278,12 +299,11 @@ def main():
 
             contracting = False
             if contract is not None:
-                contracting, greedy = contract.check_contracting(env, actions)
+                contracting, greedy = contract.check_contracting(env, actions, observations)
 
             accumulated_info = {}
             done = False
 
-            env.contract = contracting
             if contracting:
                 observations, r, done, info, compensation = contract.contracting_n_steps(env,
                                                                                          observations,
@@ -295,16 +315,17 @@ def main():
                 observations, r, done, info = env.step(actions)
                 observations = deepcopy(observations)
 
-            r, episode_compensations = contract.get_compensated_rewards(agents=agents,
-                                                                        rewards=r,
-                                                                        episode_compensations=episode_compensations)
+            r, episode_compensations, transfer = contract.get_compensated_rewards(agents=agents,
+                                                                                  rewards=r,
+                                                                                  episode_compensations=episode_compensations)
+            accumulated_transfer += transfer
 
             for i_ag in range(2):
                 scipy.misc.toimage(observations[i_ag], cmin=0.0, cmax=...).save('observations/new-outfile-{}-ag-{}.jpg'.format(i_step, i_ag))
 
             for i, agent in enumerate(env.agents):
                 info_values[i]['reward'] = r[i]
-                info_values[i]['agent_comp'] = episode_compensations[i]
+                info_values[i]['accumulated_transfer'] = accumulated_transfer[i]
                 info_values[i]['contracting'] = 0
                 info_values[i]['a{}_greedy'.format(i)] = greedy[i]
 

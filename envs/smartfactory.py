@@ -15,6 +15,7 @@ from copy import deepcopy
 import itertools as it
 import json
 import os
+import scipy
 
 INPUT_SHAPE = (84, 84)
 joint_learning = 'JOINT_LEARNING'
@@ -25,7 +26,7 @@ class Agent:
 
     AgentState = namedtuple('AgentState', 'position')
 
-    def __init__(self, world, env, index, position, goal):
+    def __init__(self, world, env, index, position, task):
         self.world = world
         self.env = env
         self.index = index
@@ -41,14 +42,27 @@ class Agent:
                                                  shapeFixture=b2FixtureDef(density=0.0))
 
         self.camera = Camera(pos=deepcopy(position), fov_dims=(3, 3))
-        self.goal = goal
         self.signalling = False
+        self.task = task
+        self.done = False
 
-    def goal_reached(self):
-        if self.body.transform.position.x == self.goal[0] and self.body.transform.position.y == self.goal[1]:
-            return True
-        else:
-            return False
+    def process_task(self):
+        x = self.body.transform.position.x
+        y = self.body.transform.position.y
+
+        task_index = -1
+        if [x, y] in self.env.goal_positions:
+            index_machine = self.env.goal_positions.index([x,y])
+            machine = self.env.goals[index_machine]
+            if machine.typ in self.task and machine.inactive <= 0:
+                machine.inactive = 10
+                index_task = self.task.index(machine.typ)
+                self.task[index_task] = -1
+                task_index = index_task
+        return task_index
+
+    def tasks_finished(self):
+        return all(i == -1 for i in self.task)
 
     def set_signalling(self, action):
         self.signalling = False
@@ -58,10 +72,13 @@ class Agent:
             self.signalling = True
             self.env.display_objects['agent-{}'.format(self.index)][1].color = self.env.colors['signalling']
 
-    def reset(self, position):
+    def reset(self, position, task):
         self.body.position = position
         self.old_pos = position
         self.current_pos = position
+
+        self.task = task
+        self.done = False
 
     def get_state(self):
         ag_state = Agent.AgentState(position=deepcopy((self.body.position.x, self.body.position.y)))
@@ -81,22 +98,27 @@ class GridCell:
         self.typ = typ
         if self.typ == 'wall':
             self.color = env.colors['wall']
-        elif self.typ == 'goal-0':
-            self.color = env.colors['goal-0']
+        elif self.typ == 0:
+            self.color = env.colors['machine-0']
+        elif self.typ == 1:
+            self.color = env.colors['machine-1']
         else:
             self.color = env.colors['field']
 
+        self.inactive = 0
+
     def reset(self, env, index, display_objects):
-        self.color = env.colors['checkpoint']
+        self.color = env.colors['field']
         display_objects['gridcell-{}'.format(index)][1].color = self.color
+        self.inactive = 0
 
 
-class MAWicksellianTriangle(gym.Env):
+class Smartfactory(gym.Env):
     metadata = {'render.modes': ['rgb_array']}
 
-    State = namedtuple('MAWicksellianTriangle', 'agent_states')
+    State = namedtuple('Smartfactory', 'agent_states')
 
-    class MAWicksellianTriangleProcessor(Processor):
+    class SmartfactoryProcessor(Processor):
         def process_observation(self, observation):
             assert observation.ndim == 3  # (height, width, channel)
             img = Image.fromarray(observation)
@@ -124,7 +146,9 @@ class MAWicksellianTriangle(gym.Env):
                  field_height,
                  rewards,
                  learning=decentral_learning,
-                 contracting=True):
+                 contracting=2,
+                 nb_machine_types=2,
+                 nb_tasks=3):
         """
 
         :rtype: observation
@@ -144,20 +168,24 @@ class MAWicksellianTriangle(gym.Env):
             'field': (1.0, 1.0, 1.0, 1.0),
             'wall': (0.5843137254901961, 0.6470588235294118, 0.6509803921568628, 0.4),
             'checkpoint': (0.13, 0.15, 0.14, 1.0),
-            'goal-0': (0.20392156862745098, 0.596078431372549, 0.8588235294117647),
-            'goal-1': (0.9058823529411765, 0.2980392156862745, 0.23529411764705882),
-            'signalling': (0.13, 0.15, 0.14, 1.0),
+            'machine-0': (0.6078431372549019, 0.34901960784313724, 0.7137254901960784),
+            'machine-1': (0.1803921568627451, 0.8, 0.44313725490196076),
+            'contracting': (0.13, 0.15, 0.14, 1.0),
         }
 
         with open('/Users/kyrill/Documents/research/wicksellian-triangle/envs/actions.json','r') as f:
             actions_json = json.load(f)
 
         self.actions = []
-        self.contracting = contracting
-        if contracting:
-            self.actions = actions_json['actions']
-        else:
-            self.actions = actions_json['actions'][:4]
+        if contracting == 0:
+            self.actions = actions_json['no_contracting_action']
+            self.colors['field'] = (0.13, 0.15, 0.14, 1.0)
+        if contracting == 1:
+            self.actions = actions_json['one_contracting_action']
+            self.colors['field'] = (1.0, 1.0, 1.0, 1.0)
+        if contracting == 2:
+            self.actions = actions_json['two_contracting_actions']
+            self.colors['field'] = (1.0, 1.0, 1.0, 1.0)
 
         self.learning = learning
         if learning == joint_learning:
@@ -190,9 +218,14 @@ class MAWicksellianTriangle(gym.Env):
         self.possible_positions = []
         self.wall_positions = []
         self.goal_positions = []
+        self.tasks = []
+        self.task_positions = []
 
         self.rewards = rewards
         self.contract = False
+
+        self.nb_machine_types = nb_machine_types
+        self.nb_tasks = nb_tasks
 
     def _create_field(self):
 
@@ -218,6 +251,7 @@ class MAWicksellianTriangle(gym.Env):
         self.market_agents = []
         self.food = []
         self.goals = []
+        self.tasks = []
         self.contract = False
         self.possible_positions = [[(-(self.field_width-(self.field_width/2)-1))+column,
                                     (self.field_height/2)-row] for row in range(self.field_height)
@@ -225,21 +259,27 @@ class MAWicksellianTriangle(gym.Env):
 
         field_indices = [pos for pos in range(self.field_width*self.field_height)]
         wall_indices = []
-        goal_indices = [0, 4]
+        goal_indices = [0, 8, 24]
         self.wall_positions = [self.possible_positions[i] for i in wall_indices]
         self.goal_positions = [self.possible_positions[i] for i in goal_indices]
         spawning_positions = list(set(field_indices) - set(wall_indices) - set(goal_indices))
         spawning_indices = np.random.choice(spawning_positions, self.nb_agents, replace=False)
 
+        tasks = [list(np.random.randint(0, self.nb_machine_types, self.nb_tasks)),
+                 list(np.random.randint(0, self.nb_machine_types, self.nb_tasks))]
+        machine_types = [0, 1, 0, 1, 0]
+
         # spawning_indices[0] = 72
         # spawning_indices[1] = 73
+
+        self.task_positions = [(-self.field_width/2 + (1 + (i * 2)) , -self.field_height/2 + -1) for i in range(self.nb_tasks)]
 
         for i in range(self.nb_agents):
             agent = Agent(world=self.world,
                           env=self,
                           index=i,
                           position=self.possible_positions[spawning_indices[i]],
-                          goal=self.goal_positions[i])
+                          task=tasks[i])
             drawing_util.add_polygon(self.display_objects, agent.body, agent.agent_vertices,
                                      name='agent-{}'.format(i),
                                      drawing_layer=2,
@@ -260,13 +300,25 @@ class MAWicksellianTriangle(gym.Env):
             self.goals.append(GridCell(env=self,
                                        index=i,
                                        position=goal_pos,
-                                       typ='goal-{}'.format(i)))
+                                       typ=machine_types[i]))
             drawing_util.add_polygon_at_pos(self.display_objects,
                                            position=(goal_pos[0], goal_pos[1]),
                                             vertices=self.agents[0].agent_vertices,
-                                           name='goal-{}'.format(i),
+                                           name='machine-{}'.format(i),
                                            drawing_layer=0,
-                                           color=self.colors['wall'.format(i)])
+                                            color=self.colors['machine-{}'.format(self.goals[-1].typ)])
+
+        for i, task_pos in enumerate(self.task_positions):
+            self.tasks.append(GridCell(env=self,
+                                       index=i,
+                                       position=task_pos,
+                                       typ='task-{}'.format(i)))
+            drawing_util.add_polygon_at_pos(self.display_objects,
+                                            position=(task_pos[0], task_pos[1]),
+                                            vertices=self.agents[0].agent_vertices,
+                                            name='task-{}'.format(i),
+                                            drawing_layer=0,
+                                            color=self.colors['outer_field'.format(1)])
 
         self._create_field()
 
@@ -278,7 +330,7 @@ class MAWicksellianTriangle(gym.Env):
             state = agent.get_state()
             agent_states.append(state)
 
-        state = MAWicksellianTriangle.State(agent_states=agent_states)
+        state = Smartfactory.State(agent_states=agent_states)
 
         return state
 
@@ -293,7 +345,7 @@ class MAWicksellianTriangle(gym.Env):
         """
         self.display_objects['field'][1].color = self.colors['field']
         if self.contract:
-            self.display_objects['field'][1].color = self.colors['signalling']
+            self.display_objects['field'][1].color = self.colors['contracting']
 
 
         info = copy.deepcopy(self.info)
@@ -310,15 +362,19 @@ class MAWicksellianTriangle(gym.Env):
         done = False
         for i, agent in enumerate(self.agents):
             self.set_position(agent, actions[agent.index])
-            # if self.contracting:
-            #   agent.set_signalling(actions[agent.index])
-            if agent.goal_reached():
+            agent.process_task()
+            if agent.tasks_finished():
                 rewards[i] += self.rewards[i]
                 done = True
-        if np.count_nonzero(rewards) >= 2:
-            c = np.random.randint(0, 2)
-            rewards[c] = 0
-        # rewards -= 0.04
+        rewards -= 0.004
+
+        for i_machine, machine in enumerate(self.goals):
+            if machine.inactive <= 0:
+                self.display_objects['machine-{}'.format(i_machine)][1].color = self.colors['machine-{}'.format(machine.typ)]
+            else:
+                machine.inactive -= 1
+                self.display_objects['machine-{}'.format(i_machine)][1].color = self.colors['field']
+
 
         for i in range(self.nb_agents):
             info['return_a{}'.format(i)] = rewards[i]
@@ -356,12 +412,25 @@ class MAWicksellianTriangle(gym.Env):
         agent.camera.pos[0] = agent.body.transform.position.x - 0.5
         agent.camera.pos[1] = agent.body.transform.position.y - 0.5
 
-    def render(self, mode='human', close=False, info_values=None):
+    def render(self, mode='human', close=False, info_values=None, agent_id=None):
         if mode == 'rgb_array':
+            display_objects = self.display_objects.copy()
+            if agent_id is not None:
+                for i_agent, agent in enumerate(self.agents):
+                    if i_agent == agent_id:
+                        display_objects['agent-{}'.format(i_agent)][1].color = self.colors['agent-0']
+                        for i_task, task in enumerate(agent.task):
+                            if task >= 0:
+                                display_objects['task-{}'.format(i_task)][1].color = self.colors['machine-{}'.format(task)]
+                            else:
+                                display_objects['task-{}'.format(i_task)][1].color = self.colors['outer_field']
+                    else:
+                        display_objects['agent-{}'.format(i_agent)][1].color = self.colors['agent-1']
             return drawing_util.render_visual_state({'camera': self.camera,
-                                                     'display_objects': self.display_objects},
+                                                     'display_objects': display_objects},
                                                     info_values,
                                                     pixels_per_worldunit=self.pixels_per_worldunit)
+
 
     @property
     def observation(self):
@@ -371,8 +440,8 @@ class MAWicksellianTriangle(gym.Env):
             List of observations
         """
         observations = []
-        for _ in range(self.nb_agents):
-            observation = self.render(mode='rgb_array')
+        for i_agent, agent in enumerate(self.agents):
+            observation = self.render(mode='rgb_array', agent_id=i_agent)
             img = Image.fromarray(observation)
             img = img.resize(INPUT_SHAPE)  # .convert('L')  # resize and convert to grayscale
             processed_observation = np.array(img)
@@ -407,25 +476,38 @@ class MAWicksellianTriangle(gym.Env):
 def main():
     nb_agents = 2
     learning = decentral_learning
-    env = MAWicksellianTriangle(nb_agents=nb_agents,
-                                field_width=9,
-                                field_height=9,
+    nb_machine_types = 2
+    nb_tasks = 3
+    field_with = field_height = 6
+    env = Smartfactory(nb_agents=nb_agents,
+                                field_width=field_with,
+                                field_height=field_height,
                                 rewards=[1, 5],
                                 learning=learning,
-                                contracting=True)
-    episodes = 2
+                                contracting=0,
+                                nb_machine_types=nb_machine_types,
+                                nb_tasks=nb_tasks)
+    episodes = 1
     episode_steps = 100
-    frames = []
+    frames_a1 = []
+    frames_a2 = []
+    combined_frames = []
 
     for i_episode in range(episodes):
 
-        _ = env.reset()
+        observations = env.reset()
         info_values = [{'reward': 0.0,
                         'action': -1,
                         'signalling': -1} for _ in range(env.nb_agents)]
-        frames.append(env.render(mode='rgb_array', info_values=info_values))
+        frames_a1.append(env.render(mode='rgb_array', info_values=info_values[0], agent_id=0))
+        frames_a2.append(env.render(mode='rgb_array', info_values=info_values[1], agent_id=1))
+        combined_frames.append(np.append(frames_a1[-1], frames_a2[-1], axis=0))
 
-        for _ in range(episode_steps):
+        for i_ag in range(nb_agents):
+            scipy.misc.toimage(observations[i_ag], cmin=0.0, cmax=...).save(
+                'observations/new-outfile-{}-ag-{}.jpg'.format(0, i_ag))
+
+        for i_step in range(1, episode_steps):
             actions = []
             if learning == decentral_learning:
                 for i_agent in range(env.nb_agents):
@@ -435,11 +517,10 @@ def main():
 
             observations, rewards, done, _ = env.step(actions=actions)
 
-            '''
-            # for i_ag in range(nb_agents):
-                # scipy.misc.toimage(observations[i_ag], cmin=0.0, cmax=...).
-                save('observations/new-outfile-{}-ag-{}.jpg'.format(i, i_ag))
-            '''
+
+            for i_ag in range(nb_agents):
+                scipy.misc.toimage(observations[i_ag], cmin=0.0, cmax=...).save('observations/new-outfile-{}-ag-{}.jpg'.format(i_step, i_ag))
+
 
             if learning == joint_learning:
                 rewards = [np.sum(rewards)]
@@ -449,12 +530,14 @@ def main():
                 info_values[i]['action'] = actions[i]
                 info_values[i]['signalling'] = agent.signalling
 
-            frames.append(env.render(mode='rgb_array', info_values=info_values))
+            frames_a1.append(env.render(mode='rgb_array', info_values=info_values[0], agent_id=0))
+            frames_a2.append(env.render(mode='rgb_array', info_values=info_values[1], agent_id=1))
+            combined_frames.append(np.append(frames_a1[-1], frames_a2[-1], axis=0))
 
             if done:
                 break
 
-    export_video('MAWicksellianTriangle-test.mp4', frames, None)
+    export_video('Smart-Factory.mp4', combined_frames, None)
 
 if __name__ == '__main__':
     main()
