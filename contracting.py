@@ -197,11 +197,11 @@ class Contract:
                     q_vals = self.agents[i_agent].compute_q_values(observations[i_agent])
                     c_actions.append(np.argmin(q_vals))
 
-
             observations, r, done, info = env.step(c_actions)
             observations = deepcopy(observations)
 
             if done or c_step == self.nb_contracting_steps - 1:
+                observations = env.observation_contract
                 contracting = True
 
             if combined_frames is not None:
@@ -217,11 +217,9 @@ class Contract:
                 combined_frames.append(np.append(frame_a1, frame_a2, axis=0))
 
             if done:
-                observations = env.observation_contract
                 break
 
         return observations, r, done, info, compensations, self.nb_contracting_steps
-
 
     def forward(self, observation, agent):
         # Select an action.
@@ -235,7 +233,6 @@ class Contract:
         agent.recent_action = action
 
         return action
-
 
     @staticmethod
     def get_compensated_rewards(agents, rewards, episode_compensations):
@@ -321,27 +318,18 @@ def main():
 
         for i_step in range(episode_steps):
 
-            actions = []
-            #for i, agent in enumerate(agents):
-            #    observations[i] = agent.processor.process_observation(observations[i])
-            #    actions.append(agent.forward(observations[i]))
-            #    if agent.processor is not None:
-            #        actions[i] = agent.processor.process_action(actions[i])
             actions = [np.random.randint(0, env.nb_actions, 1), np.random.randint(0, env.nb_actions, 1)]
-
             contracting = False
+            greedy = [False, False]
             if contract is not None:
                 contracting, greedy = contract.check_contracting(env, actions, observations)
 
-            accumulated_info = {}
-            done = False
-
             if contracting:
                 observations, r, done, info, compensation, steps = contract.contracting_n_steps(env,
-                                                                                         observations,
-                                                                                         greedy,
-                                                                                         combined_frames,
-                                                                                         info_values)
+                                                                                                observations,
+                                                                                                greedy,
+                                                                                                combined_frames,
+                                                                                                info_values)
                 episode_compensations += compensation
             else:
                 observations, r, done, info = env.step(actions)

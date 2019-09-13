@@ -5,7 +5,7 @@ import gym
 import gym.spaces
 from collections import namedtuple
 import common_utils.drawing_util as drawing_util
-from common_utils.drawing_util import Camera, render_visual_state
+from common_utils.drawing_util import Camera
 import numpy as np
 import Box2D
 from Box2D import b2PolygonShape, b2FixtureDef, b2TestOverlap, b2Transform, b2Rot, b2ChainShape
@@ -14,7 +14,6 @@ import copy
 from copy import deepcopy
 import itertools as it
 import json
-import os
 import scipy
 
 INPUT_SHAPE = (84, 84)
@@ -52,7 +51,7 @@ class Agent:
 
         task_index = -1
         if [x, y] in self.env.goal_positions:
-            index_machine = self.env.goal_positions.index([x,y])
+            index_machine = self.env.goal_positions.index([x, y])
             machine = self.env.goals[index_machine]
             if machine.typ in self.task and machine.inactive <= 0:
                 machine.inactive = 10
@@ -175,7 +174,7 @@ class Smartfactory(gym.Env):
             'dark': (0.13, 0.15, 0.14, 1.0)
         }
 
-        with open('/Users/kyrill/Documents/research/contracting-agents/envs/actions.json','r') as f:
+        with open('/Users/kyrill/Documents/research/contracting-agents/envs/actions.json', 'r') as f:
             actions_json = json.load(f)
 
         self.actions = []
@@ -274,7 +273,8 @@ class Smartfactory(gym.Env):
         # spawning_indices[0] = 72
         # spawning_indices[1] = 73
 
-        self.task_positions = [(-self.field_width/2 + (1 + (i * 2)) , -self.field_height/2 + -1) for i in range(self.nb_tasks)]
+        self.task_positions = [(-self.field_width/2 + (1 + (i * 2)),
+                                -self.field_height/2 + -1) for i in range(self.nb_tasks)]
 
         for i in range(self.nb_agents):
             agent = Agent(world=self.world,
@@ -304,10 +304,10 @@ class Smartfactory(gym.Env):
                                        position=goal_pos,
                                        typ=machine_types[i]))
             drawing_util.add_polygon_at_pos(self.display_objects,
-                                           position=(goal_pos[0], goal_pos[1]),
+                                            position=(goal_pos[0], goal_pos[1]),
                                             vertices=self.agents[0].agent_vertices,
-                                           name='machine-{}'.format(i),
-                                           drawing_layer=0,
+                                            name='machine-{}'.format(i),
+                                            drawing_layer=0,
                                             color=self.colors['machine-{}'.format(self.goals[-1].typ)])
 
         for i, task_pos in enumerate(self.task_positions):
@@ -366,18 +366,7 @@ class Smartfactory(gym.Env):
                 done = True
         rewards -= 0.01
 
-        for i_machine, machine in enumerate(self.goals):
-            if machine.inactive <= 0:
-                self.display_objects['machine-{}'.format(i_machine)][1].color = self.colors['machine-{}'.format(machine.typ)]
-            else:
-                machine.inactive -= 1
-                self.display_objects['machine-{}'.format(i_machine)][1].color = self.colors['field']
-
-        for i in range(self.nb_agents):
-            info['return_a{}'.format(i)] = rewards[i]
-
-        if self.learning == joint_learning:
-            rewards = [np.sum(rewards)]
+        self.process_machines()
 
         return self.observation, rewards, done, info
 
@@ -408,6 +397,17 @@ class Smartfactory(gym.Env):
 
         agent.camera.pos[0] = agent.body.transform.position.x - 0.5
         agent.camera.pos[1] = agent.body.transform.position.y - 0.5
+
+    def process_machines(self):
+        self.display_objects['field'][1].color = self.colors['field']
+        for i_machine, machine in enumerate(self.goals):
+            machine_index = 'machine-{}'.format(i_machine)
+            if machine.inactive <= 0:
+                machine_type = 'machine-{}'.format(machine.typ)
+                self.display_objects[machine_index][1].color = self.colors[machine_type]
+            else:
+                machine.inactive -= 1
+                self.display_objects[machine_index][1].color = self.colors['field']
 
     def render(self, mode='human', close=False, info_values=None, agent_id=None, contract=False):
         if mode == 'rgb_array':
@@ -440,7 +440,7 @@ class Smartfactory(gym.Env):
                                                     pixels_per_worldunit=self.pixels_per_worldunit)
 
     @property
-    def observation(self, contract=False):
+    def observation(self):
         """
         OpenAI Gym Observation
         :return:
@@ -448,7 +448,7 @@ class Smartfactory(gym.Env):
         """
         observations = []
         for i_agent, agent in enumerate(self.agents):
-            observation = self.render(mode='rgb_array', agent_id=i_agent, contract=contract)
+            observation = self.render(mode='rgb_array', agent_id=i_agent, contract=False)
             img = Image.fromarray(observation)
             img = img.resize(INPUT_SHAPE)  # .convert('L')  # resize and convert to grayscale
             processed_observation = np.array(img)
@@ -542,10 +542,8 @@ def main():
 
             observations, rewards, done, _ = env.step(actions=actions)
 
-
             for i_ag in range(nb_agents):
                 scipy.misc.toimage(observations[i_ag], cmin=0.0, cmax=...).save('observations/new-outfile-{}-ag-{}.jpg'.format(i_step, i_ag))
-
 
             if learning == joint_learning:
                 rewards = [np.sum(rewards)]
