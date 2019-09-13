@@ -219,12 +219,14 @@ def fit_n_agents_n_step_contracting(env,
     episode_compensations = np.zeros(2)
     accumulated_transfer = np.zeros(2)
     episode_contracts = 0
+    all_steps = 0
 
     for agent in agents:
         agent.step = 0
     did_abort = False
     try:
         while agents[0].step < nb_steps:
+        # while all_steps < nb_steps:
             if observations[0] is None:  # start of a new episode
                 observations = deepcopy(env.reset())
                 for i, agent in enumerate(agents):
@@ -265,9 +267,12 @@ def fit_n_agents_n_step_contracting(env,
             done = False
 
             if contracting:
-                observations, r, done, info, compensation = contract.contracting_n_steps(env, observations, greedy)
+                observations, r, done, info, compensation, steps = contract.contracting_n_steps(env, observations, greedy)
                 episode_compensations += compensation
                 episode_contracts += 1
+                episode_steps[0] += steps
+                episode_steps[1] += steps
+                all_steps += steps
             else:
                 observations, r, done, info = env.step(actions)
                 observations = deepcopy(observations)
@@ -291,6 +296,12 @@ def fit_n_agents_n_step_contracting(env,
                 episode_rewards[i] += r[i]
                 episode_steps[i] += 1
                 agent.step += 1
+            all_steps += 1
+
+            if contract is not None:
+                if contract.contracting_target_update >= 1 and agents[0].step % contract.contracting_target_update == 0:
+                    contract.agents[0].model.set_weights(agents[0].model.get_weights())
+                    contract.agents[1].model.set_weights(agents[1].model.get_weights())
 
             if done:
                 for i, agent in enumerate(agents):
@@ -550,12 +561,13 @@ def test_n_agents_n_step_contracting(env,
                 contracting, greedy = contract.check_contracting(env, actions, observations)
 
             if contracting:
-                observations, r, d, info, compensation = contract.contracting_n_steps(env,
+                observations, r, d, info, compensation, steps = contract.contracting_n_steps(env,
                                                                                          observations,
                                                                                          greedy,
-                                                                                         frames,
+                                                                                         combined_frames,
                                                                                          info_values)
                 episode_compensations += compensation
+                episode_step += steps
             else:
                 observations, r, d, info = env.step(actions)
                 observations = deepcopy(observations)
@@ -612,7 +624,7 @@ def test_n_agents_n_step_contracting(env,
     df.to_csv(os.path.join(log_dir, 'test-values-contracting-{}.csv'.format(contract is not None)))
 
     if log_video:
-        export_video(os.path.join(log_dir, 'MA-{}.mp4'.format(log_episode)), frames, None)
+        export_video(os.path.join(log_dir, 'MA-{}.mp4'.format(log_episode)), combined_frames, None)
     for i, agent in enumerate(agents):
         agent._on_test_end()
 

@@ -10,11 +10,21 @@ import scipy
 
 class Contract:
 
-    def __init__(self, agent_1, agent_2, contracting_actions=1):
+    def __init__(self,
+                 agent_1,
+                 agent_2,
+                 contracting_actions=1,
+                 contracting_target_update=0,
+                 nb_contracting_steps = 10,
+                 mark_up = 1.3):
+
         self.agent_1 = agent_1
         self.agent_2 = agent_2
         self.agents = [agent_1, agent_2]
         self.contracting_actions = contracting_actions
+        self.contracting_target_update = contracting_target_update
+        self.nb_contracting_steps = nb_contracting_steps
+        self.mark_up = mark_up
 
     def find_contract(self, env, actions, observations, modus=2):
         """
@@ -167,25 +177,22 @@ class Contract:
 
         return contracting, greedy
 
-    def contracting_n_steps(self, env, observations, greedy, frames=None, info_values=None):
+    def contracting_n_steps(self, env, observations, greedy, combined_frames=None, info_values=None):
 
-        nb_contracting_steps = 10
-        mark_up = 1.3 #1.7 #2.0 # 1.8
-
-        env.contract = True
-
+        contracting = False
         compensations = np.zeros(2)
         for i_agent, agent in enumerate(self.agents):
             if not greedy[i_agent]:
 
                 q_vals = self.agents[i_agent].compute_q_values(observations[i_agent])
-                compensations[(i_agent + 1) % 2] = np.max(q_vals) * mark_up
+                compensations[(i_agent + 1) % 2] = np.max(q_vals[:4]) * self.mark_up
 
-        for c_step in range(nb_contracting_steps):
+        for c_step in range(self.nb_contracting_steps):
             c_actions = []
             for i_agent, agent in enumerate(self.agents):
                 if greedy[i_agent]:
-                    c_actions.append(self.agents[i_agent].forward(observations[i_agent]))
+                    # c_actions.append(self.agents[i_agent].forward(observations[i_agent]))
+                    c_actions.append(self.forward(observations[i_agent], agent))
                 else:
                     q_vals = self.agents[i_agent].compute_q_values(observations[i_agent])
                     c_actions.append(np.argmin(q_vals))
@@ -194,7 +201,10 @@ class Contract:
             observations, r, done, info = env.step(c_actions)
             observations = deepcopy(observations)
 
-            if frames is not None:
+            if done or c_step == self.nb_contracting_steps - 1:
+                contracting = True
+
+            if combined_frames is not None:
                 if info_values is not None:
                     for i, agent in enumerate(env.agents):
                         info_values[i]['reward'] = r[i]
@@ -202,14 +212,30 @@ class Contract:
                         info_values[i]['contracting'] = 1
                         info_values[i]['a{}_greedy'.format(i)] = greedy[i]
 
-                frames.append(env.render(mode='rgb_array', info_values=info_values))
+                frame_a1 = env.render(mode='rgb_array', info_values=info_values[0], agent_id=0, contract=contracting)
+                frame_a2 = env.render(mode='rgb_array', info_values=info_values[1], agent_id=1, contract=contracting)
+                combined_frames.append(np.append(frame_a1, frame_a2, axis=0))
 
             if done:
+                observations = env.observation_contract
                 break
 
-        env.contract = False
+        return observations, r, done, info, compensations, self.nb_contracting_steps
 
-        return observations, r, done, info, compensations
+
+    def forward(self, observation, agent):
+        # Select an action.
+        state = agent.memory.get_recent_state(observation)
+        q_values = agent.compute_q_values(state)[:4]
+
+        action = agent.test_policy.select_action(q_values=q_values)
+
+        # Book-keeping.
+        agent.recent_observation = observation
+        agent.recent_action = action
+
+        return action
+
 
     @staticmethod
     def get_compensated_rewards(agents, rewards, episode_compensations):
@@ -246,16 +272,18 @@ def main():
         params_json = json.load(f)
     params = DotMap(params_json)
 
-    env = Smartfactory(nb_agents=params.nb_learners,
-                       field_width=params.field_width,
-                       field_height=params.field_height,
-                       rewards=params.rewards,
-                       contracting=True)
+    env = Smartfactory(nb_agents=2,
+                       field_width=4,
+                       field_height=4,
+                       rewards=[1, 5],
+                       contracting=1,
+                       nb_machine_types=2,
+                       nb_tasks=3)
 
     processor = env.SmartfactoryProcessor()
 
     params.nb_actions = env.nb_actions
-    episodes = 10
+    episodes = 1
     episode_steps = 100
 
     contracting_agents = []
@@ -273,7 +301,9 @@ def main():
         agent = build_agent(params=params, processor=processor)
         agents.append(agent)
 
-    frames = []
+    frames_a1 = []
+    frames_a2 = []
+    combined_frames = []
     for i_episode in range(episodes):
 
         observations = env.reset()
@@ -285,7 +315,9 @@ def main():
                         'contracting': len(plan),
                         'a{}_greedy'.format(i): -1,
                         } for i in range(env.nb_agents)]
-        frames.append(env.render(mode='rgb_array', info_values=info_values))
+        frames_a1.append(env.render(mode='rgb_array', info_values=info_values[0], agent_id=0))
+        frames_a2.append(env.render(mode='rgb_array', info_values=info_values[1], agent_id=1))
+        combined_frames.append(np.append(frames_a1[-1], frames_a2[-1], axis=0))
 
         for i_step in range(episode_steps):
 
@@ -305,10 +337,10 @@ def main():
             done = False
 
             if contracting:
-                observations, r, done, info, compensation = contract.contracting_n_steps(env,
+                observations, r, done, info, compensation, steps = contract.contracting_n_steps(env,
                                                                                          observations,
                                                                                          greedy,
-                                                                                         frames,
+                                                                                         combined_frames,
                                                                                          info_values)
                 episode_compensations += compensation
             else:
@@ -329,12 +361,14 @@ def main():
                 info_values[i]['contracting'] = 0
                 info_values[i]['a{}_greedy'.format(i)] = greedy[i]
 
-            frames.append(env.render(mode='rgb_array', info_values=info_values))
+            frames_a1.append(env.render(mode='rgb_array', info_values=info_values[0], agent_id=0))
+            frames_a2.append(env.render(mode='rgb_array', info_values=info_values[1], agent_id=1))
+            combined_frames.append(np.append(frames_a1[-1], frames_a2[-1], axis=0))
 
             if done:
                 break
 
-    export_video('MAWicksellianTriangle-Contracting.mp4', frames, None)
+    export_video('Smart-Factory-Contracting.mp4', combined_frames, None)
 
 if __name__ == '__main__':
     main()

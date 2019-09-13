@@ -171,12 +171,15 @@ class Smartfactory(gym.Env):
             'machine-0': (0.6078431372549019, 0.34901960784313724, 0.7137254901960784),
             'machine-1': (0.1803921568627451, 0.8, 0.44313725490196076),
             'contracting': (0.13, 0.15, 0.14, 1.0),
+            'white': (1.0, 1.0, 1.0, 1.0),
+            'dark': (0.13, 0.15, 0.14, 1.0)
         }
 
-        with open('/Users/kyrill/Documents/research/wicksellian-triangle/envs/actions.json','r') as f:
+        with open('/Users/kyrill/Documents/research/contracting-agents/envs/actions.json','r') as f:
             actions_json = json.load(f)
 
         self.actions = []
+        self.contracting = contracting
         if contracting == 0:
             self.actions = actions_json['no_contracting_action']
             self.colors['field'] = (0.13, 0.15, 0.14, 1.0)
@@ -252,14 +255,13 @@ class Smartfactory(gym.Env):
         self.food = []
         self.goals = []
         self.tasks = []
-        self.contract = False
         self.possible_positions = [[(-(self.field_width-(self.field_width/2)-1))+column,
                                     (self.field_height/2)-row] for row in range(self.field_height)
                                    for column in range(self.field_width)]
 
         field_indices = [pos for pos in range(self.field_width*self.field_height)]
         wall_indices = []
-        goal_indices = [0, 8, 24]
+        goal_indices = [0, self.field_width-1, (self.field_width*self.field_height) - self.field_width]
         self.wall_positions = [self.possible_positions[i] for i in wall_indices]
         self.goal_positions = [self.possible_positions[i] for i in goal_indices]
         spawning_positions = list(set(field_indices) - set(wall_indices) - set(goal_indices))
@@ -343,11 +345,6 @@ class Smartfactory(gym.Env):
         :param actions: the list of agent actions
         :type actions: list
         """
-        self.display_objects['field'][1].color = self.colors['field']
-        if self.contract:
-            self.display_objects['field'][1].color = self.colors['contracting']
-
-
         info = copy.deepcopy(self.info)
         rewards = np.zeros(self.nb_agents)
 
@@ -362,11 +359,12 @@ class Smartfactory(gym.Env):
         done = False
         for i, agent in enumerate(self.agents):
             self.set_position(agent, actions[agent.index])
-            agent.process_task()
+            if agent.process_task() >= 0:
+                rewards[i] += 0.1
             if agent.tasks_finished():
                 rewards[i] += self.rewards[i]
                 done = True
-        rewards -= 0.004
+        rewards -= 0.01
 
         for i_machine, machine in enumerate(self.goals):
             if machine.inactive <= 0:
@@ -374,7 +372,6 @@ class Smartfactory(gym.Env):
             else:
                 machine.inactive -= 1
                 self.display_objects['machine-{}'.format(i_machine)][1].color = self.colors['field']
-
 
         for i in range(self.nb_agents):
             info['return_a{}'.format(i)] = rewards[i]
@@ -412,9 +409,10 @@ class Smartfactory(gym.Env):
         agent.camera.pos[0] = agent.body.transform.position.x - 0.5
         agent.camera.pos[1] = agent.body.transform.position.y - 0.5
 
-    def render(self, mode='human', close=False, info_values=None, agent_id=None):
+    def render(self, mode='human', close=False, info_values=None, agent_id=None, contract=False):
         if mode == 'rgb_array':
             display_objects = self.display_objects.copy()
+
             if agent_id is not None:
                 for i_agent, agent in enumerate(self.agents):
                     if i_agent == agent_id:
@@ -426,14 +424,23 @@ class Smartfactory(gym.Env):
                                 display_objects['task-{}'.format(i_task)][1].color = self.colors['outer_field']
                     else:
                         display_objects['agent-{}'.format(i_agent)][1].color = self.colors['agent-1']
+
+            if contract:
+                display_objects['field'][1].color = self.colors['contracting']
+                for i_machine, machine in enumerate(self.goals):
+                    if machine.inactive <= 0:
+                        display_objects['machine-{}'.format(i_machine)][1].color = self.colors['machine-{}'.format(machine.typ)]
+                    else:
+                        display_objects['machine-{}'.format(i_machine)][1].color = self.colors['contracting']
+
+
             return drawing_util.render_visual_state({'camera': self.camera,
                                                      'display_objects': display_objects},
                                                     info_values,
                                                     pixels_per_worldunit=self.pixels_per_worldunit)
 
-
     @property
-    def observation(self):
+    def observation(self, contract=False):
         """
         OpenAI Gym Observation
         :return:
@@ -441,7 +448,25 @@ class Smartfactory(gym.Env):
         """
         observations = []
         for i_agent, agent in enumerate(self.agents):
-            observation = self.render(mode='rgb_array', agent_id=i_agent)
+            observation = self.render(mode='rgb_array', agent_id=i_agent, contract=contract)
+            img = Image.fromarray(observation)
+            img = img.resize(INPUT_SHAPE)  # .convert('L')  # resize and convert to grayscale
+            processed_observation = np.array(img)
+            observation = processed_observation.astype('uint8')
+            observations.append(observation)
+
+        return observations
+
+    @property
+    def observation_contract(self):
+        """
+        OpenAI Gym Observation
+        :return:
+            List of observations
+        """
+        observations = []
+        for i_agent, agent in enumerate(self.agents):
+            observation = self.render(mode='rgb_array', agent_id=i_agent, contract=True)
             img = Image.fromarray(observation)
             img = img.resize(INPUT_SHAPE)  # .convert('L')  # resize and convert to grayscale
             processed_observation = np.array(img)
