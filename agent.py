@@ -10,7 +10,7 @@ from common_utils.utils import export_video
 import os
 from collections import deque
 import pandas as pd
-
+import common_utils.drawing_util as drawing_util
 
 def build_agent(params, processor):
     # input_shape = (84, 84, 3)
@@ -330,27 +330,22 @@ def fit_n_agents_n_step_contracting(env,
         agent.training = True
         agent._on_train_begin()
 
-    df = pd.DataFrame(columns=('episode',
-                               'contracting',
-                               'reward',
-                               'reward_a1',
-                               'reward_a2',
-                               'accumulated_transfer_a1',
-                               'accumulated_transfer_a2',
-                               'greedy_a1',
-                               'greedy_a2',
-                               'number_contracts',
-                               'episode_steps',
-                               'action_a1',
-                               'action_a2'))
+    ep_columns = ['episode', 'contracting', 'reward', 'number_contracts', 'episode_steps']
+    for i_ag in range(len(agents)):
+        ag_columns = ['reward_a{}'.format(i_ag),
+                      'accumulated_transfer_a{}'.format(i_ag),
+                      'greedy_a{}'.format(i_ag)]
+        ep_columns += ag_columns
+
+    df = pd.DataFrame(columns=ep_columns)
 
     episode = 0
     observations = [None for _ in agents]
     episode_rewards = [None for _ in agents]
-    episode_steps = [None for _ in agents]
+    episode_steps = 0
 
-    episode_compensations = np.zeros(2)
-    accumulated_transfer = np.zeros(2)
+    episode_compensations = np.zeros(len(agents))
+    accumulated_transfer = np.zeros(len(agents))
     episode_contracts = 0
     all_steps = 0
     test_episodes = 0
@@ -364,13 +359,13 @@ def fit_n_agents_n_step_contracting(env,
             if observations[0] is None:  # start of a new episode
                 observations = deepcopy(env.reset())
                 for i, agent in enumerate(agents):
-                    episode_steps[i] = 0
+                    episode_steps = 0
                     episode_rewards[i] = 0
                     episode_contracts = 0
-                    episode_compensations = np.zeros(2)
-                    accumulated_transfer = np.zeros(2)
-                    episode_greedy = np.zeros(2)
-                    compensation = np.zeros(2)
+                    episode_compensations = np.zeros(len(agents))
+                    accumulated_transfer = np.zeros(len(agents))
+                    episode_greedy = np.zeros(len(agents))
+                    compensation = np.zeros(len(agents))
                     greedy = [False, False]
                     # Obtain the initial observation by resetting the environment.
                     agent.reset_states()
@@ -379,7 +374,7 @@ def fit_n_agents_n_step_contracting(env,
                     assert observations[i] is not None
                     # At this point, we expect to be fully initialized.
                     assert episode_rewards[i] is not None
-                    assert episode_steps[i] is not None
+                    assert episode_steps is not None
                     assert observations[i] is not None
 
             actions = []
@@ -404,8 +399,7 @@ def fit_n_agents_n_step_contracting(env,
                 observations, r, done, info, compensation, steps = contract.contracting_n_steps(env, observations, greedy)
                 episode_compensations += compensation
                 episode_contracts += 1
-                episode_steps[0] += steps
-                episode_steps[1] += steps
+                episode_steps += steps
                 all_steps += steps
             else:
                 observations, r, done, info = env.step(actions)
@@ -421,14 +415,14 @@ def fit_n_agents_n_step_contracting(env,
                 if agent.processor is not None:
                     observations[i], r[i], done, info = agent.processor.process_step(observations[i], r[i], done, info)
 
-            if nb_max_episode_steps and episode_steps[0] >= nb_max_episode_steps - 1:
+            if nb_max_episode_steps and episode_steps >= nb_max_episode_steps - 1:
                 # Force a terminal state.
                 done = True
 
             for i, agent in enumerate(agents):
                 metrics = agent.backward(r[i], terminal=done)
                 episode_rewards[i] += r[i]
-                episode_steps[i] += 1
+                episode_steps += 1
                 agent.step += 1
             all_steps += 1
 
@@ -442,35 +436,27 @@ def fit_n_agents_n_step_contracting(env,
                     agent.forward(observations[i])
                     agent.backward(0., terminal=False)
 
-                logger.write_log('episode_return', np.sum(episode_rewards), episode)
-                for i, agent in enumerate(agents):
-                    logger.write_log('episode_return_agent-{}'.format(i), episode_rewards[i], episode)
-                logger.write_log('accumulated_transfer_a1', accumulated_transfer[0], episode)
-                logger.write_log('accumulated_transfer_a2', accumulated_transfer[1], episode)
-                logger.write_log('contracting', int(episode_contracts), episode)
-                logger.write_log('a1_greedy', episode_greedy[0], episode)
-                logger.write_log('a2_greedy', episode_greedy[1], episode)
-                logger.write_log('episode_steps', episode_steps[0], episode)
+                ep_stats = [episode, (contract is not None), np.sum(episode_rewards), int(episode_contracts), episode_steps]
 
-                df.loc[episode] = [episode,
-                                   (contract is not None),
-                                   np.sum(episode_rewards),
-                                   episode_rewards[0],
-                                   episode_rewards[1],
-                                   accumulated_transfer[0],
-                                   accumulated_transfer[1],
-                                   episode_greedy[0],
-                                   episode_greedy[1],
-                                   int(episode_contracts),
-                                   episode_steps[0],
-                                   actions[0],
-                                   actions[1]]
+                logger.write_log('episode_return', np.sum(episode_rewards), episode)
+                logger.write_log('contracting', int(episode_contracts), episode)
+                logger.write_log('episode_steps', episode_steps, episode)
+
+                for i_ag in range(len(agents)):
+                    logger.write_log('episode_return_agent-{}'.format(i_ag), episode_rewards[i_ag], episode)
+                    logger.write_log('accumulated_transfer_a-{}'.format(i_ag), accumulated_transfer[i_ag], episode)
+                    logger.write_log('a{}-greedy'.format(i_ag), episode_greedy[i_ag], episode)
+
+                    ag_stats = [episode_rewards[i_ag], accumulated_transfer[i_ag], episode_greedy[i_ag]]
+                    ep_stats += ag_stats
+
+                df.loc[episode] = ep_stats
 
                 observations = [None for _ in agents]
-                episode_steps = [None for _ in agents]
+                episode_steps = 0
                 episode_rewards = [None for _ in agents]
                 episode_compensations = np.zeros(2)
-                episode_greedy = np.zeros(2)
+                episode_greedy = np.zeros(len(agents))
                 episode_contracts = 0
                 episode += 1
 
@@ -527,15 +513,15 @@ def test_n_agents_n_step_contracting(env,
         observations = deepcopy(env.reset())
         compensation = np.zeros(2)
         greedy = [False, False]
+        combined_frames = []
 
         info_values = [{'reward': 0.0,
                         'agent_comp': episode_compensations[i],
                         'contracting': len(plan),
                         'a{}_greedy'.format(i): -1,
                         } for i in range(env.nb_agents)]
-        frames_a1.append(env.render(mode='rgb_array', info_values=info_values[0], agent_id=0))
-        frames_a2.append(env.render(mode='rgb_array', info_values=info_values[1], agent_id=1))
-        combined_frames.append(np.append(frames_a1[-1], frames_a2[-1], axis=0))
+
+        combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values, observations)
 
         for i, agent in enumerate(agents):
             episode_rewards[i] = 0.
@@ -586,10 +572,8 @@ def test_n_agents_n_step_contracting(env,
                 info_values[i]['contracting'] = 0
                 info_values[i]['a{}_greedy'.format(i)] = greedy[i]
 
-            # TODO: Remove this when contracting
-            frames_a1.append(env.render(mode='rgb_array', info_values=info_values[0], agent_id=0))
-            frames_a2.append(env.render(mode='rgb_array', info_values=info_values[1], agent_id=1))
-            combined_frames.append(np.append(frames_a1[-1], frames_a2[-1], axis=0))
+            if not contracting:
+                combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values, observations)
 
             for i, agent in enumerate(agents):
                 if agent.processor is not None:

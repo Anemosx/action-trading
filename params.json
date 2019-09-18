@@ -1,7 +1,9 @@
-{"nb_steps": 50000,
-  "memory_limit": 50000,
-  "eps_val_max": 0.5,
-  "eps_val_min": 0.1,
+{
+  "nb_agents": 1,
+  "nb_steps": 25000,
+  "memory_limit": 25000,
+  "eps_val_max": 1.0,
+  "eps_val_min": 0.2,
   "eps_val_test": 0.3,
   "nb_steps_warmup": 500,
   "target_update": 200,
@@ -9,7 +11,6 @@
   "input_shape": [84, 84, 3],
   "field_width": 5,
   "field_height": 5,
-  "nb_learners": 2,
   "nb_machine_types": 2,
   "nb_tasks": 3,
   "rewards": [1, 5],
@@ -18,4 +19,5 @@
   "nb_actions_two_contracting_action": 12,
   "contracting_target_update": 0,
   "nb_contracting_steps": 15,
-  "mark_up": 1.0}
+  "mark_up": 1.0
+}
