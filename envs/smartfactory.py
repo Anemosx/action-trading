@@ -407,10 +407,13 @@ class Smartfactory(gym.Env):
                 machine.inactive -= 1
                 self.display_objects[machine_index][1].color = self.colors['field']
 
-    def render(self, mode='human', close=False, info_values=None, agent_id=None, contract=False):
+    def render(self, mode='human', close=False, info_values=None, agent_id=None, contract=False, video=False):
         if mode == 'rgb_array':
             display_objects = self.display_objects.copy()
-
+            if video:
+                camera = Camera(pos=(0,0), fov_dims=(9, 9))
+            else:
+                camera = self.camera
             if agent_id is not None:
                 for i_agent, agent in enumerate(self.agents):
                     if i_agent == agent_id:
@@ -433,7 +436,8 @@ class Smartfactory(gym.Env):
                     else:
                         display_objects['machine-{}'.format(i_machine)][1].color = self.colors['contracting']
 
-            return drawing_util.render_visual_state({'camera': self.camera,
+
+            return drawing_util.render_visual_state({'camera': camera,
                                                      'display_objects': display_objects},
                                                     info_values,
                                                     pixels_per_worldunit=self.pixels_per_worldunit)
