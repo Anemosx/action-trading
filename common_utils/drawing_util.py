@@ -260,7 +260,13 @@ def render_combined_frames(combined_frames, env, info_values, observations=False
     frames = []
     for i_ag in range(env.nb_agents):
         frames.append(env.render(mode='rgb_array', info_values=info_values[i_ag], agent_id=i_ag, video=True))
-    combined_frames.append(np.append(frames[0], frames[1], axis=0))
+
+    if env.nb_agents == 1:
+        combined_frames.append(frames[0])
+
+    if env.nb_agents == 2:
+        combined_frames.append(np.append(frames[0], frames[1], axis=0))
+
 
     if observations:
         for i_ag in range(env.nb_agents):

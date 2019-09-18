@@ -5,6 +5,7 @@ import gym
 import gym.spaces
 from collections import namedtuple
 import common_utils.drawing_util as drawing_util
+from common_utils.drawing_util import  render_visual_state
 from common_utils.drawing_util import Camera
 import numpy as np
 import Box2D
@@ -345,15 +346,13 @@ class Smartfactory(gym.Env):
         rewards = np.zeros(self.nb_agents)
 
         if self.learning == decentral_learning:
-            joint_actions = [self.actions[actions[0]], self.actions[actions[1]]]
-            actions = joint_actions
-
-        if self.learning == joint_learning:
-            joint_actions = [self.actions[actions[0]][0], self.actions[actions[0]][1]]
+            joint_actions = []
+            for i_ag in range(self.nb_agents):
+                joint_actions.append(self.actions[actions[i_ag]])
             actions = joint_actions
 
         done = False
-        queue = np.random.choice([0, 1], 2, replace=False)
+        queue = np.random.choice([0, self.nb_agents-1], self.nb_agents, replace=False)
         for i in queue:
             agent = self.agents[i]
             self.set_position(agent, actions[agent.index])
@@ -414,19 +413,20 @@ class Smartfactory(gym.Env):
                 camera = Camera(pos=(0,0), fov_dims=(9, 9))
             else:
                 camera = self.camera
+
             if agent_id is not None:
-                for i_agent, agent in enumerate(self.agents):
-                    if i_agent == agent_id:
-                        display_objects['agent-{}'.format(i_agent)] = (10, display_objects['agent-{}'.format(i_agent)][1])
-                        display_objects['agent-{}'.format((i_agent + 1) % 2)] = (2, display_objects['agent-{}'.format((i_agent + 1) % 2)][1])
-                        display_objects['agent-{}'.format(i_agent)][1].color = self.colors['agent-0']
-                        for i_task, task in enumerate(agent.task):
-                            if task >= 0:
-                                display_objects['task-{}'.format(i_task)][1].color = self.colors['machine-{}'.format(task)]
-                            else:
-                                display_objects['task-{}'.format(i_task)][1].color = self.colors['outer_field']
+                display_objects['agent-{}'.format(agent_id)][1].color = self.colors['agent-0']
+                display_objects['agent-{}'.format(agent_id)] = (10, display_objects['agent-{}'.format(agent_id)][1])
+                for i_task, task in enumerate(self.agents[agent_id].task):
+                    if task >= 0:
+                        display_objects['task-{}'.format(i_task)][1].color = self.colors['machine-{}'.format(task)]
                     else:
+                        display_objects['task-{}'.format(i_task)][1].color = self.colors['outer_field']
+
+                for i_agent, agent in enumerate(self.agents):
+                    if i_agent != agent_id:
                         display_objects['agent-{}'.format(i_agent)][1].color = self.colors['agent-1']
+                        display_objects['agent-{}'.format((i_agent))] = (2, display_objects['agent-{}'.format(i_agent)][1])
 
             if contract:
                 display_objects['field'][1].color = self.colors['contracting']
@@ -436,11 +436,10 @@ class Smartfactory(gym.Env):
                     else:
                         display_objects['machine-{}'.format(i_machine)][1].color = self.colors['contracting']
 
-
-            return drawing_util.render_visual_state({'camera': camera,
-                                                     'display_objects': display_objects},
-                                                    info_values,
-                                                    pixels_per_worldunit=self.pixels_per_worldunit)
+            return render_visual_state({'camera': camera,
+                                        'display_objects': display_objects},
+                                       info_values,
+                                       pixels_per_worldunit=self.pixels_per_worldunit)
 
     @property
     def observation(self):
@@ -502,7 +501,7 @@ class Smartfactory(gym.Env):
 
 
 def main():
-    nb_agents = 2
+    nb_agents = 1
     nb_machine_types = 2
     nb_tasks = 3
     field_with = field_height = 6
@@ -521,8 +520,7 @@ def main():
 
         observations = env.reset()
         info_values = [{'reward': 0.0,
-                        'action': -1,
-                        'signalling': -1} for _ in range(env.nb_agents)]
+                        'action': -1} for _ in range(env.nb_agents)]
 
         combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values, observations)
 
@@ -537,7 +535,6 @@ def main():
             for i, agent in enumerate(env.agents):
                 info_values[i]['reward'] = rewards[i]
                 info_values[i]['action'] = actions[i]
-                info_values[i]['signalling'] = agent.signalling
 
             combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values, observations)
 
