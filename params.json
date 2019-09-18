@@ -1,9 +1,9 @@
 {
   "nb_agents": 1,
-  "nb_steps": 25000,
-  "memory_limit": 25000,
+  "nb_steps": 100000,
+  "memory_limit": 100000,
   "eps_val_max": 1.0,
-  "eps_val_min": 0.2,
+  "eps_val_min": 0.1,
   "eps_val_test": 0.3,
   "nb_steps_warmup": 500,
   "target_update": 200,

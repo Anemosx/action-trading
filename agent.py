@@ -489,18 +489,6 @@ def test_n_agents_n_step_contracting(env,
         agent.step = 0
         agent._on_test_begin()
 
-    df = pd.DataFrame(columns=('episode',
-                               'contracting',
-                               'reward',
-                               'reward_a1',
-                               'reward_a2',
-                               'accumulated_transfer_a1',
-                               'accumulated_transfer_a2',
-                               'number_contracts',
-                               'episode_steps'))
-
-    frames_a1 = []
-    frames_a2 = []
     combined_frames = []
 
     for episode in range(nb_episodes):
@@ -597,16 +585,6 @@ def test_n_agents_n_step_contracting(env,
             agent.forward(observations[i])
             agent.backward(0., terminal=False)
 
-        df.loc[episode] = [episode,
-                           (contract is not None),
-                           episode_rewards[0] + episode_rewards[1],
-                           episode_rewards[0],
-                           episode_rewards[1],
-                           accumulated_transfer[0],
-                           accumulated_transfer[1],
-                           nb_contracts,
-                           episode_step]
-
     # df.to_csv(os.path.join(log_dir, 'test-values-contracting-{}.csv'.format(contract is not None)))
 
     if log_video:
@@ -614,7 +592,7 @@ def test_n_agents_n_step_contracting(env,
     for i, agent in enumerate(agents):
         agent._on_test_end()
 
-    return df
+    return None
 
 
 def fit_n_self_play(env,
