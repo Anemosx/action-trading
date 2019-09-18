@@ -14,7 +14,6 @@ import copy
 from copy import deepcopy
 import itertools as it
 import json
-import scipy
 
 INPUT_SHAPE = (84, 84)
 joint_learning = 'JOINT_LEARNING'
@@ -40,7 +39,7 @@ class Agent:
                                                  shapes=[b2PolygonShape(vertices=self.agent_vertices)],
                                                  shapeFixture=b2FixtureDef(density=0.0))
 
-        self.camera = Camera(pos=deepcopy(position), fov_dims=(3, 3))
+        self.camera = Camera(pos=deepcopy(position), fov_dims=(6, 6)) #fov_dims=(3, 3))
         self.signalling = False
         self.task = task
         self.done = False
@@ -145,7 +144,7 @@ class Smartfactory(gym.Env):
                  field_height,
                  rewards,
                  learning=decentral_learning,
-                 contracting=2,
+                 contracting=0,
                  nb_machine_types=2,
                  nb_tasks=3):
         """
@@ -162,13 +161,13 @@ class Smartfactory(gym.Env):
 
         self.colors = {
             'agent-0': (0.20392156862745098, 0.596078431372549, 0.8588235294117647),
-            'agent-1': (0.9058823529411765, 0.2980392156862745, 0.23529411764705882),
+            'agent-1': (0.13, 0.15, 0.14, 1.0),
             'outer_field': (0.5843137254901961, 0.6470588235294118, 0.6509803921568628),
             'field': (1.0, 1.0, 1.0, 1.0),
             'wall': (0.5843137254901961, 0.6470588235294118, 0.6509803921568628, 0.4),
             'checkpoint': (0.13, 0.15, 0.14, 1.0),
-            'machine-0': (0.6078431372549019, 0.34901960784313724, 0.7137254901960784),
-            'machine-1': (0.1803921568627451, 0.8, 0.44313725490196076),
+            'machine-0': (0.1803921568627451, 0.8, 0.44313725490196076), #(0.6078431372549019, 0.34901960784313724, 0.7137254901960784),
+            'machine-1': (0.9058823529411765, 0.2980392156862745, 0.23529411764705882),
             'contracting': (0.13, 0.15, 0.14, 1.0),
             'white': (1.0, 1.0, 1.0, 1.0),
             'dark': (0.13, 0.15, 0.14, 1.0)
@@ -181,13 +180,10 @@ class Smartfactory(gym.Env):
         self.contracting = contracting
         if contracting == 0:
             self.actions = actions_json['no_contracting_action']
-            self.colors['field'] = (0.13, 0.15, 0.14, 1.0)
         if contracting == 1:
             self.actions = actions_json['one_contracting_action']
-            self.colors['field'] = (1.0, 1.0, 1.0, 1.0)
         if contracting == 2:
             self.actions = actions_json['two_contracting_actions']
-            self.colors['field'] = (1.0, 1.0, 1.0, 1.0)
 
         self.learning = learning
         if learning == joint_learning:
@@ -203,7 +199,7 @@ class Smartfactory(gym.Env):
 
         self.pixels_per_worldunit = 24
         self.obs_pixels_per_worldunit = 8
-        self.camera = Camera(pos=(0, 0), fov_dims=(9, 9))
+        self.camera = Camera(pos=(0, 0), fov_dims=(5, 5)) # fov_dims=(9, 9)
         self.display_objects = dict()
         self.field_width = field_width
         self.field_height = field_height
@@ -357,14 +353,16 @@ class Smartfactory(gym.Env):
             actions = joint_actions
 
         done = False
-        for i, agent in enumerate(self.agents):
+        queue = np.random.choice([0, 1], 2, replace=False)
+        for i in queue:
+            agent = self.agents[i]
             self.set_position(agent, actions[agent.index])
             if agent.process_task() >= 0:
-                rewards[i] += 0.1
+                rewards[i] += 0.0
             if agent.tasks_finished():
                 rewards[i] += self.rewards[i]
                 done = True
-        rewards -= 0.01
+        rewards -= 0.0001
 
         self.process_machines()
 
@@ -416,6 +414,8 @@ class Smartfactory(gym.Env):
             if agent_id is not None:
                 for i_agent, agent in enumerate(self.agents):
                     if i_agent == agent_id:
+                        display_objects['agent-{}'.format(i_agent)] = (10, display_objects['agent-{}'.format(i_agent)][1])
+                        display_objects['agent-{}'.format((i_agent + 1) % 2)] = (2, display_objects['agent-{}'.format((i_agent + 1) % 2)][1])
                         display_objects['agent-{}'.format(i_agent)][1].color = self.colors['agent-0']
                         for i_task, task in enumerate(agent.task):
                             if task >= 0:
@@ -432,7 +432,6 @@ class Smartfactory(gym.Env):
                         display_objects['machine-{}'.format(i_machine)][1].color = self.colors['machine-{}'.format(machine.typ)]
                     else:
                         display_objects['machine-{}'.format(i_machine)][1].color = self.colors['contracting']
-
 
             return drawing_util.render_visual_state({'camera': self.camera,
                                                      'display_objects': display_objects},
@@ -500,22 +499,18 @@ class Smartfactory(gym.Env):
 
 def main():
     nb_agents = 2
-    learning = decentral_learning
     nb_machine_types = 2
     nb_tasks = 3
     field_with = field_height = 6
+
     env = Smartfactory(nb_agents=nb_agents,
                                 field_width=field_with,
                                 field_height=field_height,
                                 rewards=[1, 5],
-                                learning=learning,
-                                contracting=0,
                                 nb_machine_types=nb_machine_types,
                                 nb_tasks=nb_tasks)
     episodes = 1
     episode_steps = 100
-    frames_a1 = []
-    frames_a2 = []
     combined_frames = []
 
     for i_episode in range(episodes):
@@ -524,38 +519,23 @@ def main():
         info_values = [{'reward': 0.0,
                         'action': -1,
                         'signalling': -1} for _ in range(env.nb_agents)]
-        frames_a1.append(env.render(mode='rgb_array', info_values=info_values[0], agent_id=0))
-        frames_a2.append(env.render(mode='rgb_array', info_values=info_values[1], agent_id=1))
-        combined_frames.append(np.append(frames_a1[-1], frames_a2[-1], axis=0))
 
-        for i_ag in range(nb_agents):
-            scipy.misc.toimage(observations[i_ag], cmin=0.0, cmax=...).save(
-                'observations/new-outfile-{}-ag-{}.jpg'.format(0, i_ag))
+        combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values, observations)
 
         for i_step in range(1, episode_steps):
+
             actions = []
-            if learning == decentral_learning:
-                for i_agent in range(env.nb_agents):
-                    actions.append(np.random.randint(0, env.nb_actions))
-            elif learning == joint_learning:
+            for i_agent in range(env.nb_agents):
                 actions.append(np.random.randint(0, env.nb_actions))
 
             observations, rewards, done, _ = env.step(actions=actions)
-
-            for i_ag in range(nb_agents):
-                scipy.misc.toimage(observations[i_ag], cmin=0.0, cmax=...).save('observations/new-outfile-{}-ag-{}.jpg'.format(i_step, i_ag))
-
-            if learning == joint_learning:
-                rewards = [np.sum(rewards)]
 
             for i, agent in enumerate(env.agents):
                 info_values[i]['reward'] = rewards[i]
                 info_values[i]['action'] = actions[i]
                 info_values[i]['signalling'] = agent.signalling
 
-            frames_a1.append(env.render(mode='rgb_array', info_values=info_values[0], agent_id=0))
-            frames_a2.append(env.render(mode='rgb_array', info_values=info_values[1], agent_id=1))
-            combined_frames.append(np.append(frames_a1[-1], frames_a2[-1], axis=0))
+            combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values, observations)
 
             if done:
                 break

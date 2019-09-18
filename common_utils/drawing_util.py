@@ -5,6 +5,7 @@ import gizeh
 import numpy as np
 
 import math
+import scipy
 
 DummyBody = namedtuple('DummyBody', 'position angle')
 
@@ -253,6 +254,20 @@ def render_all_agents(env, info_values, dist_frames=None, observations=None):
     frame_combined = np.append(frame_ag0, frame_ag1, axis=0)
 
     return frame_combined
+
+
+def render_combined_frames(combined_frames, env, info_values, observations=False):
+    frames = []
+    for i_ag in range(env.nb_agents):
+        frames.append(env.render(mode='rgb_array', info_values=info_values[i_ag], agent_id=i_ag))
+    combined_frames.append(np.append(frames[0], frames[1], axis=0))
+
+    if observations:
+        for i_ag in range(env.nb_agents):
+            scipy.misc.toimage(observations[i_ag], cmin=0.0, cmax=...).save(
+                'observations/new-outfile-{}-ag-{}.jpg'.format(0, i_ag))
+
+    return combined_frames
 
 
 def render_observations(camera, pixels_per_worldunit, observations, bg_color=(0.5, 0.5, 0.5)) -> np.ndarray:

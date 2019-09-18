@@ -5,11 +5,11 @@ import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
 
-    log_dir = 'experiments/20190911-14-50-47'
-    nb_runs = 1
-    window = 25
+    log_dir = 'experiments/20190914-13-44-15'
+    nb_runs = 8
+    window = 20
     episodes = 2500
-    runs = [False, True]
+    runs = [0, 2]
     testing = False
 
     i = 0
@@ -18,8 +18,8 @@ if __name__ == '__main__':
 
             df_new = pd.read_csv(os.path.join(log_dir,
                                           'run-{}'.format(run),
-                                          'contracting-{}'.format(c),
-                                          'train-values-contracting-{}.csv'.format(c)))
+                                          'contracting-{}-mark-up-1.4'.format(c),
+                                          'train-values-contracting-{}.csv'.format(c>0)))
 
             df_new = df_new[:episodes]
             df_new = df_new.rolling(window=window,center=False).mean()

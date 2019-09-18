@@ -15,8 +15,8 @@ class Contract:
                  agent_2,
                  contracting_actions=1,
                  contracting_target_update=0,
-                 nb_contracting_steps = 10,
-                 mark_up = 1.3):
+                 nb_contracting_steps=10,
+                 mark_up=1.0):
 
         self.agent_1 = agent_1
         self.agent_2 = agent_2
@@ -183,7 +183,6 @@ class Contract:
         compensations = np.zeros(2)
         for i_agent, agent in enumerate(self.agents):
             if not greedy[i_agent]:
-
                 q_vals = self.agents[i_agent].compute_q_values(observations[i_agent])
                 compensations[(i_agent + 1) % 2] = np.max(q_vals[:4]) * self.mark_up
 
@@ -201,6 +200,18 @@ class Contract:
             observations = deepcopy(observations)
 
             if done or c_step == self.nb_contracting_steps - 1:
+
+                """
+                TODO: debug this new compensation scheme: difference from max in
+                state and max in state after contracting
+                
+                for i_agent, agent in enumerate(self.agents):
+                    if not greedy[i_agent]:
+                        q_vals = self.agents[i_agent].compute_q_values(observations[i_agent])
+                        c_t = np.max(q_vals[:4]) * self.mark_up
+                        compensations[(i_agent + 1) % 2] = np.max(compensations[(i_agent + 1) % 2] - c_t, 0)
+                """
+
                 observations = env.observation_contract
                 contracting = True
 
@@ -223,14 +234,15 @@ class Contract:
 
     def forward(self, observation, agent):
         # Select an action.
-        state = agent.memory.get_recent_state(observation)
-        q_values = agent.compute_q_values(state)[:4]
+        # state = agent.memory.get_recent_state(observation)
+        q_values = agent.compute_q_values(observation)[:4]
 
+        # TODO: Train or test policy?
         action = agent.test_policy.select_action(q_values=q_values)
 
         # Book-keeping.
-        agent.recent_observation = observation
-        agent.recent_action = action
+        # agent.recent_observation = observation
+        # agent.recent_action = action
 
         return action
 
@@ -269,61 +281,70 @@ def main():
         params_json = json.load(f)
     params = DotMap(params_json)
 
-    env = Smartfactory(nb_agents=2,
-                       field_width=4,
-                       field_height=4,
+    nb_agents = 2
+
+    env = Smartfactory(nb_agents=nb_agents,
+                       field_width=5,
+                       field_height=5,
                        rewards=[1, 5],
-                       contracting=1,
+                       contracting=0,
                        nb_machine_types=2,
                        nb_tasks=3)
 
     processor = env.SmartfactoryProcessor()
 
     params.nb_actions = env.nb_actions
-    episodes = 1
+    episodes = 5
     episode_steps = 100
 
     contracting_agents = []
     params.nb_actions = 4
-    for i in range(2):
+    for i in range(nb_agents):
         agent = build_agent(params=params, processor=processor)
         contracting_agents.append(agent)
-    contracting_agents[0].load_weights('logs/20190907-20-27-10/contracting-False/dqn_weights-agent-0.h5f')
-    contracting_agents[1].load_weights('logs/20190907-20-27-10/contracting-False/dqn_weights-agent-1.h5f')
     contract = Contract(agent_1=contracting_agents[0], agent_2=contracting_agents[1])
-    params.nb_actions = 12
+    contract = None
 
     agents = []
-    for _ in range(params.nb_learners):
+    for i_agent in range(params.nb_agents):
         agent = build_agent(params=params, processor=processor)
         agents.append(agent)
+        agents[i_agent].load_weights('experiments/20190918-10-04-56/run-0/contracting-0/dqn_weights-agent-{}.h5f'.format(i_agent))
 
-    frames_a1 = []
-    frames_a2 = []
+
     combined_frames = []
     for i_episode in range(episodes):
 
         observations = env.reset()
-        episode_compensations = np.zeros(2)
-        accumulated_transfer = np.zeros(2)
+        episode_compensations = np.zeros(nb_agents)
+        accumulated_transfer = np.zeros(nb_agents)
         plan = []
+
+        for i_ag in range(nb_agents):
+            scipy.misc.toimage(observations[i_ag], cmin=0.0, cmax=...).save(
+                'observations/new-outfile-{}-ag-{}.jpg'.format(0, i_ag))
+
         info_values = [{'reward': 0.0,
                         'accumulated_transfer': accumulated_transfer[i],
                         'contracting': len(plan),
                         'a{}_greedy'.format(i): -1,
-                        } for i in range(env.nb_agents)]
-        frames_a1.append(env.render(mode='rgb_array', info_values=info_values[0], agent_id=0))
-        frames_a2.append(env.render(mode='rgb_array', info_values=info_values[1], agent_id=1))
-        combined_frames.append(np.append(frames_a1[-1], frames_a2[-1], axis=0))
+                        } for i in range(nb_agents)]
+
+        frames = []
+        for i_ag in range(nb_agents):
+            frames.append(env.render(mode='rgb_array', info_values=info_values[i_ag], agent_id=i_ag))
+
+        combined_frames.append(np.append(frames[0], frames[1], axis=0))
 
         for i_step in range(episode_steps):
+            actions = []
+            for i_ag in range(nb_agents):
+                actions.append(agents[i_ag].forward(observations[i_ag]))
 
-            actions = [np.random.randint(0, env.nb_actions, 1), np.random.randint(0, env.nb_actions, 1)]
             contracting = False
             greedy = [False, False]
             if contract is not None:
                 contracting, greedy = contract.check_contracting(env, actions, observations)
-
             if contracting:
                 observations, r, done, info, compensation, steps = contract.contracting_n_steps(env,
                                                                                                 observations,
@@ -340,18 +361,19 @@ def main():
                                                                                   episode_compensations=episode_compensations)
             accumulated_transfer += transfer
 
-            for i_ag in range(2):
-                scipy.misc.toimage(observations[i_ag], cmin=0.0, cmax=...).save('observations/new-outfile-{}-ag-{}.jpg'.format(i_step, i_ag))
+            for i_ag in range(nb_agents):
+                scipy.misc.toimage(observations[i_ag], cmin=0.0, cmax=...).save('observations/new-outfile-{}-ag-{}.jpg'.format(i_step + 1, i_ag))
 
-            for i, agent in enumerate(env.agents):
-                info_values[i]['reward'] = r[i]
-                info_values[i]['accumulated_transfer'] = accumulated_transfer[i]
-                info_values[i]['contracting'] = 0
-                info_values[i]['a{}_greedy'.format(i)] = greedy[i]
+            if not contracting:
+                for i_ag in range(nb_agents):
+                    info_values[i_ag]['reward'] = r[i_ag]
+                    info_values[i_ag]['accumulated_transfer'] = accumulated_transfer[i_ag]
+                    info_values[i_ag]['contracting'] = int(contracting)
+                    info_values[i_ag]['a{}_greedy'.format(i_ag)] = greedy[i_ag]
 
-            frames_a1.append(env.render(mode='rgb_array', info_values=info_values[0], agent_id=0))
-            frames_a2.append(env.render(mode='rgb_array', info_values=info_values[1], agent_id=1))
-            combined_frames.append(np.append(frames_a1[-1], frames_a2[-1], axis=0))
+                frames = []
+                for i_ag in range(nb_agents):
+                    frames.append(env.render(mode='rgb_array', info_values=info_values[i_ag], agent_id=i_ag))
 
             if done:
                 break
