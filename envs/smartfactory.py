@@ -361,7 +361,7 @@ class Smartfactory(gym.Env):
             if agent.tasks_finished():
                 rewards[i] += self.rewards[i]
                 done = True
-        rewards -= 0.004
+        rewards -= 0.01
 
         self.process_machines()
 

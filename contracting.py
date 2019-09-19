@@ -6,7 +6,7 @@ from agent import build_agent
 from dotmap import DotMap
 import json
 import scipy
-
+import common_utils.drawing_util as drawing_util
 
 class Contract:
 
@@ -281,64 +281,58 @@ def main():
         params_json = json.load(f)
     params = DotMap(params_json)
 
-    nb_agents = 2
-
-    env = Smartfactory(nb_agents=nb_agents,
-                       field_width=5,
-                       field_height=5,
-                       rewards=[1, 5],
-                       contracting=0,
-                       nb_machine_types=2,
-                       nb_tasks=3)
+    c = 0
+    env = Smartfactory(nb_agents=params.nb_agents,
+                       field_width=params.field_width,
+                       field_height=params.field_height,
+                       rewards=params.rewards,
+                       contracting=c,
+                       nb_machine_types=params.nb_machine_types,
+                       nb_tasks=params.nb_tasks
+                       )
 
     processor = env.SmartfactoryProcessor()
 
     params.nb_actions = env.nb_actions
     episodes = 5
     episode_steps = 100
-
-    contracting_agents = []
     params.nb_actions = 4
-    for i in range(nb_agents):
-        agent = build_agent(params=params, processor=processor)
-        contracting_agents.append(agent)
-    contract = Contract(agent_1=contracting_agents[0], agent_2=contracting_agents[1])
+
     contract = None
+    if c > 0:
+        contracting_agents = []
+        for i in range(params.nb_agents):
+            agent = build_agent(params=params, processor=processor)
+            contracting_agents.append(agent)
+        contract = Contract(agent_1=contracting_agents[0], agent_2=contracting_agents[1])
 
     agents = []
     for i_agent in range(params.nb_agents):
         agent = build_agent(params=params, processor=processor)
         agents.append(agent)
-        agents[i_agent].load_weights('experiments/20190918-10-04-56/run-0/contracting-0/dqn_weights-agent-{}.h5f'.format(i_agent))
-
+        agents[i_agent].load_weights('experiments/20190918-16-45-03/run-0/contracting-0/dqn_weights-agent-{}.h5f'.format(i_agent))
 
     combined_frames = []
     for i_episode in range(episodes):
 
         observations = env.reset()
-        episode_compensations = np.zeros(nb_agents)
-        accumulated_transfer = np.zeros(nb_agents)
-        plan = []
-
-        for i_ag in range(nb_agents):
-            scipy.misc.toimage(observations[i_ag], cmin=0.0, cmax=...).save(
-                'observations/new-outfile-{}-ag-{}.jpg'.format(0, i_ag))
+        episode_compensations = np.zeros(params.nb_agents)
+        accumulated_transfer = np.zeros(params.nb_agents)
+        contracting = False
+        greedy = [False, False]
 
         info_values = [{'reward': 0.0,
                         'accumulated_transfer': accumulated_transfer[i],
-                        'contracting': len(plan),
+                        'contracting': contracting,
                         'a{}_greedy'.format(i): -1,
-                        } for i in range(nb_agents)]
+                        } for i in range(params.nb_agents)]
 
-        frames = []
-        for i_ag in range(nb_agents):
-            frames.append(env.render(mode='rgb_array', info_values=info_values[i_ag], agent_id=i_ag))
-
-        combined_frames.append(np.append(frames[0], frames[1], axis=0))
+        combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values, observations)
 
         for i_step in range(episode_steps):
+
             actions = []
-            for i_ag in range(nb_agents):
+            for i_ag in range(params.nb_agents):
                 actions.append(agents[i_ag].forward(observations[i_ag]))
 
             contracting = False
@@ -356,24 +350,21 @@ def main():
                 observations, r, done, info = env.step(actions)
                 observations = deepcopy(observations)
 
-            r, episode_compensations, transfer = contract.get_compensated_rewards(agents=agents,
-                                                                                  rewards=r,
-                                                                                  episode_compensations=episode_compensations)
-            accumulated_transfer += transfer
-
-            for i_ag in range(nb_agents):
-                scipy.misc.toimage(observations[i_ag], cmin=0.0, cmax=...).save('observations/new-outfile-{}-ag-{}.jpg'.format(i_step + 1, i_ag))
+            if contract is not None:
+                r, episode_compensations, transfer = contract.get_compensated_rewards(agents=agents,
+                                                                                      rewards=r,
+                                                                                      episode_compensations=episode_compensations)
+                accumulated_transfer += transfer
 
             if not contracting:
-                for i_ag in range(nb_agents):
+                for i_ag in range(params.nb_agents):
                     info_values[i_ag]['reward'] = r[i_ag]
                     info_values[i_ag]['accumulated_transfer'] = accumulated_transfer[i_ag]
                     info_values[i_ag]['contracting'] = int(contracting)
                     info_values[i_ag]['a{}_greedy'.format(i_ag)] = greedy[i_ag]
 
-                frames = []
-                for i_ag in range(nb_agents):
-                    frames.append(env.render(mode='rgb_array', info_values=info_values[i_ag], agent_id=i_ag))
+                    combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values,
+                                                                          observations)
 
             if done:
                 break
