@@ -18,8 +18,8 @@ def train():
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
-    for run in range(1):
-        for c in [0]:
+    for run in range(5):
+        for c in [2]:
 
             params.contracting = c
             run_dir = os.path.join(log_dir, 'run-{}'.format(run), 'contracting-{}'.format(c))
@@ -36,6 +36,7 @@ def train():
                                field_width=params.field_width,
                                field_height=params.field_height,
                                rewards=params.rewards,
+                               step_penalty=params.step_penalty,
                                contracting=c,
                                nb_machine_types=params.nb_machine_types,
                                nb_tasks=params.nb_tasks
@@ -47,33 +48,25 @@ def train():
 
             agents = []
             for _ in range(params.nb_agents):
-                agent = build_agent(params=params, processor=processor)
+                agent = build_agent(params=params, nb_actions=env.nb_actions,  processor=processor)
                 agents.append(agent)
-            # agents[0].load_weights('experiments/20190917-18-08-13/run-0/contracting-0/dqn_weights-agent-0.h5f')
-            # agents[1].load_weights('experiments/20190917-18-08-13/run-0/contracting-0/dqn_weights-agent-1.h5f')
+            # agents[0].load_weights('experiments/20190923-10-58-52/run-0/contracting-2/dqn_weights-agent-0.h5f')
+            # agents[1].load_weights('experiments/20190923-10-58-52/run-0/contracting-2/dqn_weights-agent-1.h5f')
 
             contract = None
-            if c:
-                assert params.nb_agents == 2
-                params.nb_actions = params.nb_actions_no_contracting_action
+            if c > 0:
                 contracting_agents = []
                 for i in range(params.nb_agents):
-                    agent = build_agent(params=params, processor=processor)
-                    # agent.load_weights(os.path.join(log_dir, 'run-{}'.format(run), 'contracting-0/dqn_weights-agent-{}.h5f'.format(i)))
-                    agent.load_weights('experiments/20190918-10-04-56/run-0/contracting-0/dqn_weights-agent-{}.h5f'.format(i))
+                    agent = build_agent(params=params, nb_actions=params.nb_actions_no_contracting_action,
+                                        processor=processor)
+                    agent.load_weights('experiments/20190923-10-58-52/run-0/contracting-0/dqn_weights-agent-0.h5f'.format(i))
                     contracting_agents.append(agent)
 
-                contract = Contract(agent_1= contracting_agents[0],  # agents[0],
-                                    agent_2= contracting_agents[1],  # agents[1],
-                                    contracting_actions=c,
+                contract = Contract(agent_1=contracting_agents[0],
+                                    agent_2=contracting_agents[1],
                                     contracting_target_update=params.contracting_target_update,
                                     nb_contracting_steps=params.nb_contracting_steps,
                                     mark_up=params.mark_up)
-
-                if c == 1:
-                    params.nb_actions = params.nb_actions_one_contracting_action
-                if c == 2:
-                    params.nb_actions = params.nb_actions_two_contracting_action
 
             fit_n_agents_n_step_contracting(env,
                                             agents=agents,
@@ -85,13 +78,6 @@ def train():
 
             for i_agent, agent in enumerate(agents):
                 agent.save_weights(os.path.join(run_dir, 'dqn_weights-agent-{}.h5f'.format(i_agent)), overwrite=True)
-
-            test_n_agents_n_step_contracting(env,
-                                             agents=agents,
-                                             nb_episodes=20,
-                                             nb_max_episode_steps=50,
-                                             log_dir=run_dir,
-                                             contract=contract)
 
 
 if __name__ == '__main__':
