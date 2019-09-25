@@ -1,0 +1,60 @@
+\section{Introduction}\label{sec:introduction}
+
+
+\section{Background}\label{sec:background}
+
+
+\section{Related Work}\label{sec:related_work}
+
+
+\section{Contracting}\label{sec:contracting}
+
+
+\begin{algorithm}
+\caption{Contracting}\label{algorithm:STEP}
+\begin{algorithmic}[1]
+\Procedure{$\textit{Contract}(Q^{\textit{greedy}}, Q^{\textit{non-greedy}}, N_{c})$}{}
+\State Observe current state $s_{1}$
+\State Calculate compensation $q_{\textit{c}} \leftarrow max_{a}(Q^{\textit{non-greedy}}(s_{1}, a))$
+\For{$t = 1,N_{c}$}
+\State $a_{\textit{greedy}} \leftarrow argmax_{a}(Q^{\textit{greedy}}(s, a))$
+\State $a_{\textit{non-greedy}} \leftarrow argmin_{a}(Q^{\textit{non-greedy}}(s, a))$
+\State Execute $a_{t} \leftarrow \langle a_{\textit{greedy}}, a_{\textit{non-greedy}} \rangle$
+\State  Observe rewards $r_{g, t}, r_{n,  t}$ and new state $s_{t+1}$
+\State $s \leftarrow s_{t+1}$
+%\State $\langle \hat{\pi}_{i}, \hat{V} \rangle \leftarrow f_{i,\theta}$ 
+%\For{$i \in \{1, ..., N\}$} \Comment{decentralized planning}
+%\State	$\langle a_{t,i}, p(a_{t,i}|s_{t}) \rangle \leftarrow \textit{DPlan}(i, s_{t}, \hat{M}, N, n_{b}, \hat{V}, \hat{\pi}_{i})$
+%\EndFor
+%\State  $p_{t} \leftarrow \langle p(a_{t,1}|s_{t}),..., p(a_{t,N}|s_{t}) \rangle$
+%\State	Execute $a_{t} \leftarrow \langle a_{t,1}, ..., a_{t,N} \rangle$
+%\State  Observe global reward $r_{t}$ and new state $s_{t+1}$
+%\State	Store $e_{t} \leftarrow \langle s_{t}, a_{t}, s_{t+1}, r_{t}, p_{t}\rangle$ in $E$
+%\State	Refine $\theta$ to minimize $L_{\textit{STEP}}$ for all $e_{t} \in E$ \Comment{centralized learning}
+\EndFor
+\State Final compensation $q_{\textit{c}} \leftarrow q_{\textit{c}} - max_{a}(Q^{\textit{non-greedy}}(s, a))$
+\State Final returns $R_g \leftarrow - q_{\textit{c}} + \sum_{t=1}^{N_c} r_{g, t}, R_n \leftarrow  q_{\textit{c}} + \sum_{t=1}^{N_c} r_{n, t} $
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+
+\section{Experiments}\label{sec:experiments}
+
+
+\subsection{Evaluation Environments}\label{subsec:environments}
+
+
+\subsubsection{Smart Factory (SF)}
+
+
+\subsection{Methods}
+
+
+\subsection{Results}
+
+
+\subsection{Discussion}
+
+
+\section{Conclusion and Future Work}\label{sec:conclusion}

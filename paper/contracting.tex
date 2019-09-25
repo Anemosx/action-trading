@@ -1,0 +1,211 @@
+%%
+%% sample document for AAMAS'19 conference
+%%
+%% modified from sample-sigconf.tex
+%%
+%% see ACM instructions acmguide.pdf
+%%
+%% AAMAS-specific questions? F.A.Oliehoek@tudelft.nl
+%%
+
+\documentclass[sigconf]{aamas}  % do not change this line!
+
+%% your usepackages here, for example:
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{subfig}
+\usepackage{bm}
+\usepackage{tabularx}                             % more flexible table environment
+\usepackage{algorithm}
+\usepackage{algorithmicx}
+\usepackage{amssymb}
+\usepackage[noend]{algpseudocode}
+\usepackage{multicol}
+\usepackage{amsmath}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}m{#1}}
+\newcolumntype{P}[1]{>{\centering\arraybackslash}p{#1}}
+\newcommand{\Mod}[1]{\ (\mathrm{mod}\ #1)}
+%% do not change the following lines
+\setcopyright{ifaamas}  % do not change this line!
+\acmDOI{doi}  % do not change this line!
+\acmISBN{}  % do not change this line!
+\acmConference[AAMAS'19]{Proc.\@ of the 18th International Conference on Autonomous Agents and Multiagent Systems (AAMAS 2019), N.~Agmon, M.~E.~Taylor, E.~Elkind, M.~Veloso (eds.)}{May 2019}{Montreal, Canada}  % do not change this line!
+\acmYear{2019}  % do not change this line!
+\copyrightyear{2019}  % do not change this line!
+\acmPrice{}  % do not change this line!
+
+%% the rest of your preamble here
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+
+\title{Contracting Actions in Self-Interested Multi-Agent Reinforcement Learning}  % put your title here!
+%\titlenote{Produces the permission block, and copyright information}
+
+% AAMAS: as appropriate, uncomment one subtitle line; check the CFP
+%\subtitle{Extended Abstract}
+%\subtitle{Industrial Applications Track}
+%\subtitle{Socially Interactive Agents Track}
+%\subtitle{Blue Sky Ideas Track}
+%\subtitle{Engineering Multiagent Systems Track}
+%\subtitle{Robotics Track}
+%\subtitle{JAAMAS Track}
+%\subtitle{Doctoral Mentoring Program}
+
+%\subtitlenote{The full version of the author's guide is available as \texttt{acmart.pdf} document}
+
+
+% AAMAS: submissions are anonymous for most tracks
+\author{Paper \#...}  % put your paper number here!
+%\author{Kyrill Schmid}
+%\affiliation{%
+%  \institution{LMU Munich}
+  %\streetaddress{P.O. Box 1212}
+  %\city{Dublin} 
+  %\state{Ohio} 
+  %\postcode{43017-6221}
+  %}
+%\email{kyrill.schmid@ifi.lmu.de}
+
+%% example of author block for camera ready version of accepted papers: don't use for anonymous submissions
+%
+%\author{Ben Trovato}
+%\authornote{Dr.~Trovato insisted his name be first.}
+%\orcid{1234-5678-9012}
+%\affiliation{%
+%  \institution{Institute for Clarity in Documentation}
+%  \streetaddress{P.O. Box 1212}
+%  \city{Dublin} 
+%  \state{Ohio} 
+%  \postcode{43017-6221}
+%}
+%\email{trovato@corporation.com}
+%
+%\author{G.K.M. Tobin}
+%\authornote{The secretary disavows any knowledge of this author's actions.}
+%\affiliation{%
+%  \institution{Institute for Clarity in Documentation}
+%  \streetaddress{P.O. Box 1212}
+%  \city{Dublin} 
+%  \state{Ohio} 
+%  \postcode{43017-6221}
+%}
+%\email{webmaster@marysville-ohio.com}
+%
+%\author{Lars Th{\o}rv{\"a}ld}
+%\authornote{This author is the
+%  one who did all the really hard work.}
+%\affiliation{%
+%  \institution{The Th{\o}rv{\"a}ld Group}
+%  \streetaddress{1 Th{\o}rv{\"a}ld Circle}
+%  \city{Hekla} 
+%  \country{Iceland}}
+%\email{larst@affiliation.org}
+%
+%\author{Valerie B\'eranger}
+%\affiliation{%
+%  \institution{Inria Paris-Rocquencourt}
+%  \city{Rocquencourt}
+%  \country{France}
+%}
+%\author{Aparna Patel} 
+%\affiliation{%
+% \institution{Rajiv Gandhi University}
+% \streetaddress{Rono-Hills}
+% \city{Doimukh} 
+% \state{Arunachal Pradesh}
+% \country{India}}
+%\author{Huifen Chan}
+%\affiliation{%
+%  \institution{Tsinghua University}
+%  \streetaddress{30 Shuangqing Rd}
+%  \city{Haidian Qu} 
+%  \state{Beijing Shi}
+%  \country{China}
+%}
+%
+%\author{Charles Palmer}
+%\affiliation{%
+%  \institution{Palmer Research Laboratories}
+%  \streetaddress{8600 Datapoint Drive}
+%  \city{San Antonio}
+%  \state{Texas} 
+%  \postcode{78229}}
+%\email{cpalmer@prl.com}
+%
+%\author{John Smith}
+%\affiliation{\institution{The Th{\o}rv{\"a}ld Group}}
+%\email{jsmith@affiliation.org}
+%
+%\author{Julius P.~Kumquat}
+%\affiliation{\institution{The Kumquat Consortium}}
+%\email{jpkumquat@consortium.net}
+%
+%% The example's default list of authors is too long for headers
+%\renewcommand{\shortauthors}{B. Trovato et al.}
+
+
+\begin{abstract}  % put your abstract here!
+
+
+Whereas agents in cooperative environments share the same reward function in self-interested settings agents maximize their individual returns. As a consequence agents learned policies tend to be overly greedy especially when shared resources between agents are scarce. Cooperative game theory provides a theoretical framework for self-interested settings where binding agreements between agents are possible. In this work we propose binding agreements for multi-agent reinforcement learning which allow agents to transfer reward in exchange for following a non greedy trajectory. Thus, agents are enabled to compensate each other for their occurred losses that arise from behaving non-greedy. We evaluate our proposed method in a smart-factory scenario where agents compete for available machines. The tasks either have low-priority or high-priority, giving small rewards or high-rewards respectively. We empirically demonstrate that RL agents stably learn agreements and thus originate higher returns compared with the pure self-interested case.
+\end{abstract}
+
+
+% AAMAS: the ACM CCS are not needed within AAMAS papers
+%%
+%% The code below should be generated by the tool at
+%% http://dl.acm.org/ccs.cfm
+%% Please copy and paste the code instead of the example below. 
+%%
+%\begin{CCSXML}
+%<ccs2012>
+% <concept>
+%  <concept_id>10010520.10010553.10010562</concept_id>
+%  <concept_desc>Computer systems organization~Embedded systems</concept_desc>
+%  <concept_significance>500</concept_significance>
+% </concept>
+% <concept>
+%  <concept_id>10010520.10010575.10010755</concept_id>
+%  <concept_desc>Computer systems organization~Redundancy</concept_desc>
+%  <concept_significance>300</concept_significance>
+% </concept>
+% <concept>
+%  <concept_id>10010520.10010553.10010554</concept_id>
+%  <concept_desc>Computer systems organization~Robotics</concept_desc>
+%  <concept_significance>100</concept_significance>
+% </concept>
+% <concept>
+%  <concept_id>10003033.10003083.10003095</concept_id>
+%  <concept_desc>Networks~Network reliability</concept_desc>
+%  <concept_significance>100</concept_significance>
+% </concept>
+%</ccs2012>  
+%\end{CCSXML}
+%
+%\ccsdesc[500]{Computer systems organization~Embedded systems}
+%\ccsdesc[300]{Computer systems organization~Redundancy}
+%\ccsdesc{Computer systems organization~Robotics}
+%\ccsdesc[100]{Networks~Network reliability}
+
+
+\keywords{multi-agent learning; cooperative game theory}  % put your semicolon-separated keywords here!
+
+\maketitle
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% start of main body of paper
+
+\input{contracting-conf}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% bibliography: see CFP for number of permitted pages
+
+\bibliographystyle{ACM-Reference-Format}  % do not change this line!
+\bibliography{references}  % put name of your .bib file here
+
+\end{document}
