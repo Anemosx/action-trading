@@ -19,7 +19,7 @@ def train():
         os.makedirs(log_dir)
 
     for run in range(5):
-        for c in [2]:
+        for c in [0]:
 
             params.contracting = c
             run_dir = os.path.join(log_dir, 'run-{}'.format(run), 'contracting-{}'.format(c))

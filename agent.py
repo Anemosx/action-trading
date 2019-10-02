@@ -373,7 +373,11 @@ def fit_n_agents_n_step_contracting(env,
                 if agent.processor is not None:
                     actions[i] = agent.processor.process_action(actions[i])
 
-            observations, r, done, info, contracting = contract.contracting_n_steps(env, observations, actions)
+            if contract is not None:
+                observations, r, done, info, contracting = contract.contracting_n_steps(env, observations, actions)
+            else:
+                observations, r, done, info = env.step(actions)
+
             observations = deepcopy(observations)
 
             if contract is not None:

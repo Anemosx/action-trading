@@ -93,17 +93,34 @@ if __name__ == '__main__':
     plt.clf()
     '''
 
-    df_1 = pd.read_csv('experiments/20190923-10-58-52/run-0/contracting-0/train-values-contracting-False.csv')
-    df_1 = df_1.rolling(window=30,center=False).mean()
+    df = pd.read_csv('experiments/20190923-10-58-52/run-0/contracting-0/train-values-contracting-False.csv')
+    df = df.rolling(window=30, center=False).mean()
 
-    df_2 = pd.read_csv('experiments/20190923-10-58-52/run-0/contracting-2/train-values-contracting-True.csv')
-    df_2 = df_2.rolling(window=30, center=False).mean()
+    df_1 = pd.read_csv('experiments/20190923-10-58-52/run-0/contracting-2/train-values-contracting-True.csv')
+    df_1 = df_1.rolling(window=30, center=False).mean()
+    df = df.append(df_1, ignore_index=True)
 
-    df = df_1.append(df_2, ignore_index=True)
+    for r in [1, 2, 3, 4]:
+
+        df_1 = pd.read_csv('experiments/20190925-17-05-20/run-{}/contracting-2/train-values-contracting-True.csv'.format(r))
+        df_1 = df_1.rolling(window=30, center=False).mean()
+        df = df.append(df_1, ignore_index=True)
+
+        df_1 = pd.read_csv('experiments/20190925-17-05-20/run-{}/contracting-0/train-values-contracting-False.csv'.format(r))
+        df_1 = df_1.rolling(window=30, center=False).mean()
+        df = df.append(df_1, ignore_index=True)
 
     sns.lineplot(x="episode", y="reward", hue='contracting', data=df, palette="Set2")
     plt.savefig(os.path.join(log_dir, 'rewards-var.png'))
     plt.clf()
+
+    #sns.lineplot(x="episode", y="accumulated_transfer_a0", hue='contracting', data=df, palette="Set2")
+    #plt.savefig(os.path.join(log_dir, 'accumulated_transfer_a0.png'))
+    #plt.clf()
+
+    #sns.lineplot(x="episode", y="accumulated_transfer_a1", hue='contracting', data=df, palette="Set2")
+    #plt.savefig(os.path.join(log_dir, 'accumulated_transfer_a1.png'))
+    #plt.clf()
 
 
 
