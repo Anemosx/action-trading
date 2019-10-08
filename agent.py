@@ -31,7 +31,6 @@ def build_agent(params, nb_actions, processor):
     print(model.summary())
 
     memory = SequentialMemory(limit=params.memory_limit, window_length=1)
-    # processor = MABargainingProcessor()
 
     policy = LinearAnnealedPolicy(EpsGreedyQPolicy(), attr='eps', value_max=params.eps_val_max,
                                   value_min=params.eps_val_min, value_test=params.eps_val_test,
