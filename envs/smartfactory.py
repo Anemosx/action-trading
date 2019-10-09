@@ -438,17 +438,7 @@ class Smartfactory(gym.Env):
         contracting = False
 
         if self.contracting == 1:
-            if self.actions[actions[0]][2] == 1 and self.actions[actions[1]][2] == 1:
-                contracting = True
-                q_vals = [np.max(self.agents[i_agent].compute_q_values(self.observation[i_agent]))
-                          for i_agent in range(len(self.agents))]
-                if q_vals[0] > q_vals[1]:
-                    greedy[0] = 1
-                if q_vals[1] > q_vals[0]:
-                    greedy[1] = 1
-                if q_vals[0] == q_vals[1]:
-                    i_agent = np.random.randint(0, len(self.agents))
-                    greedy[i_agent] = 1
+            raise NotImplementedError
 
         if self.contracting == 2:
             if self.actions[actions[0]][2] == 1 and self.actions[actions[1]][3] == 1:
