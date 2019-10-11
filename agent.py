@@ -368,9 +368,12 @@ def fit_n_agents_n_step_contracting(env,
                 # Run a single step.
                 # This is were all of the work happens. We first perceive and compute the action
                 # (forward step) and then use the reward to improve (backward step).
-                actions.append(agent.forward(observations[i]))
-                if agent.processor is not None:
-                    actions[i] = agent.processor.process_action(actions[i])
+                if not env.agents[i].done:
+                    actions.append(agent.forward(observations[i]))
+                    if agent.processor is not None:
+                        actions[i] = agent.processor.process_action(actions[i])
+                else:
+                    actions.append(0)
 
             if contract is not None:
                 observations, r, done, info, contracting = contract.contracting_n_steps(env, observations, actions)

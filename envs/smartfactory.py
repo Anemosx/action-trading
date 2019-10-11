@@ -147,7 +147,6 @@ class Smartfactory(gym.Env):
                  field_width,
                  field_height,
                  rewards,
-                 step_penalty,
                  learning=decentral_learning,
                  contracting=0,
                  nb_machine_types=2,
@@ -226,7 +225,6 @@ class Smartfactory(gym.Env):
         self.task_positions = []
 
         self.rewards = rewards
-        self.step_penalty = step_penalty
         self.contract = False
 
         self.nb_machine_types = nb_machine_types
@@ -367,6 +365,7 @@ class Smartfactory(gym.Env):
         """
         info = copy.deepcopy(self.info)
         rewards = np.zeros(self.nb_agents)
+        done = False
 
         if self.learning == decentral_learning:
             joint_actions = []
@@ -374,22 +373,24 @@ class Smartfactory(gym.Env):
                 joint_actions.append(self.actions[actions[i_ag]])
             actions = joint_actions
 
-        done = False
         queue = np.random.choice([0, self.nb_agents-1], self.nb_agents, replace=False)
         for i in queue:
             agent = self.agents[i]
-            self.set_position(agent, actions[agent.index])
-            if agent.process_task() >= 0:
-                rewards[i] += 0.0
-            if agent.tasks_finished():
+            if not agent.done:
+                self.set_position(agent, actions[agent.index])
                 if self.priorities[i]:
                     rewards[i] += self.rewards[1]
                 else:
                     rewards[i] += self.rewards[0]
-                done = True
-        rewards -= self.step_penalty
+                if agent.process_task() >= 0:
+                    rewards[i] += 1.0
+                if agent.tasks_finished():
+                    agent.done = True
 
         self.process_machines()
+
+        if np.sum([int(agent.done) for agent in self.agents]) == len(self.agents):
+            done = True
 
         return self.observation, rewards, done, info
 
@@ -461,7 +462,13 @@ class Smartfactory(gym.Env):
                 camera = self.camera
 
             if agent_id is not None:
-                display_objects['agent-{}'.format(agent_id)][1].color = self.colors['agent-0']
+
+                if self.agents[agent_id].done:
+                    display_objects['agent-{}'.format(agent_id)][1].color = (1.0, 1.0, 1.0, 0.0)
+                else:
+                    display_objects['agent-{}'.format(agent_id)][1].color = self.colors['agent-0']
+
+
                 display_objects['agent-{}'.format(agent_id)] = (10, display_objects['agent-{}'.format(agent_id)][1])
 
                 if self.priorities[agent_id]:
@@ -483,7 +490,10 @@ class Smartfactory(gym.Env):
 
                 for i_agent, agent in enumerate(self.agents):
                     if i_agent != agent_id:
-                        display_objects['agent-{}'.format(i_agent)][1].color = self.colors['agent-1']
+                        if self.agents[i_agent].done:
+                            display_objects['agent-{}'.format(i_agent)][1].color = (1.0, 1.0, 1.0, 0.0)
+                        else:
+                            display_objects['agent-{}'.format(i_agent)][1].color = self.colors['agent-1']
                         display_objects['agent-{}'.format((i_agent))] = (2, display_objects['agent-{}'.format(i_agent)][1])
 
             return render_visual_state({'camera': camera,
@@ -533,7 +543,7 @@ class Smartfactory(gym.Env):
 
 
 def main():
-    nb_agents = 1
+    nb_agents = 2
     nb_machine_types = 2
     nb_tasks = 3
     field_with = field_height = 4
@@ -541,8 +551,7 @@ def main():
     env = Smartfactory(nb_agents=nb_agents,
                        field_width=field_with,
                        field_height=field_height,
-                       rewards=[1, 5],
-                       step_penalty=0.0,
+                       rewards=[-0.01, -0.1],
                        nb_machine_types=nb_machine_types,
                        nb_tasks=nb_tasks)
     episodes = 1

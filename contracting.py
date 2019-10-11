@@ -116,9 +116,9 @@ def main():
     params = DotMap(params_json)
 
     c = 2
-    policy_random = False
-    episodes = 200
-    episode_steps = 50
+    policy_random = True
+    episodes = 2
+    episode_steps = 100
 
     ep_columns = ['episode', 'contracting', 'reward', 'number_contracts', 'episode_steps']
     for i_ag in range(params.nb_agents):
@@ -131,7 +131,6 @@ def main():
                        field_width=params.field_width,
                        field_height=params.field_height,
                        rewards=params.rewards,
-                       step_penalty=params.step_penalty,
                        contracting=c,
                        nb_machine_types=params.nb_machine_types,
                        nb_tasks=params.nb_tasks
@@ -144,7 +143,7 @@ def main():
         contracting_agents = []
         for i in range(params.nb_agents):
             agent = build_agent(params=params, nb_actions=params.nb_actions_no_contracting_action, processor=processor)
-            agent.load_weights('experiments/20190919-18-24-35/run-0/contracting-0/dqn_weights-agent-1.h5f'.format(i))
+            agent.load_weights('experiments/20191011-13-43-33/run-0/contracting-0/dqn_weights-agent-{}.h5f'.format(i))
             contracting_agents.append(agent)
         contract = Contract(agent_1=contracting_agents[0],
                             agent_2=contracting_agents[1],
@@ -156,7 +155,7 @@ def main():
     for i_agent in range(params.nb_agents):
         agent = build_agent(params=params, nb_actions=env.nb_contracting_actions, processor=processor)
         agents.append(agent)
-        agents[i_agent].load_weights('experiments/20190923-10-58-52/run-0/contracting-{}/dqn_weights-agent-0.h5f'.format(c, i_agent))
+        #agents[i_agent].load_weights('experiments/20191011-11-47-41/run-0/contracting-0/dqn_weights-agent-{}.h5f'.format(c, i_agent))
 
     combined_frames = []
     for i_episode in range(episodes):
@@ -231,7 +230,7 @@ def main():
                 break
 
     df.to_csv(os.path.join('test-values-contracting-c-{}.csv'.format(c)))
-    # export_video('Smart-Factory-Contracting.mp4', combined_frames, None)
+    export_video('Smart-Factory-Contracting.mp4', combined_frames, None)
 
 if __name__ == '__main__':
     main()

@@ -18,8 +18,8 @@ def train():
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
-    for run in range(5):
-        for c in [0]:
+    for run in range(1):
+        for c in [2]:
 
             params.contracting = c
             run_dir = os.path.join(log_dir, 'run-{}'.format(run), 'contracting-{}'.format(c))
@@ -36,7 +36,6 @@ def train():
                                field_width=params.field_width,
                                field_height=params.field_height,
                                rewards=params.rewards,
-                               step_penalty=params.step_penalty,
                                contracting=c,
                                nb_machine_types=params.nb_machine_types,
                                nb_tasks=params.nb_tasks
@@ -59,7 +58,7 @@ def train():
                 for i in range(params.nb_agents):
                     agent = build_agent(params=params, nb_actions=params.nb_actions_no_contracting_action,
                                         processor=processor)
-                    agent.load_weights('experiments/20190923-10-58-52/run-0/contracting-0/dqn_weights-agent-0.h5f'.format(i))
+                    agent.load_weights('experiments/20191011-11-47-41/run-0/contracting-0/dqn_weights-agent-{}.h5f'.format(i))
                     contracting_agents.append(agent)
 
                 contract = Contract(agent_1=contracting_agents[0],
