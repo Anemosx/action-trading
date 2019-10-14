@@ -115,9 +115,9 @@ def main():
         params_json = json.load(f)
     params = DotMap(params_json)
 
-    c = 2
-    policy_random = True
-    episodes = 2
+    c = 0
+    policy_random = False
+    episodes = 5
     episode_steps = 100
 
     ep_columns = ['episode', 'contracting', 'reward', 'number_contracts', 'episode_steps']
@@ -143,7 +143,7 @@ def main():
         contracting_agents = []
         for i in range(params.nb_agents):
             agent = build_agent(params=params, nb_actions=params.nb_actions_no_contracting_action, processor=processor)
-            agent.load_weights('experiments/20191011-13-43-33/run-0/contracting-0/dqn_weights-agent-{}.h5f'.format(i))
+            agent.load_weights('experiments/20191011-17-49-29/run-0/contracting-0/dqn_weights-agent-{}.h5f'.format(i))
             contracting_agents.append(agent)
         contract = Contract(agent_1=contracting_agents[0],
                             agent_2=contracting_agents[1],
@@ -155,7 +155,7 @@ def main():
     for i_agent in range(params.nb_agents):
         agent = build_agent(params=params, nb_actions=env.nb_contracting_actions, processor=processor)
         agents.append(agent)
-        #agents[i_agent].load_weights('experiments/20191011-11-47-41/run-0/contracting-0/dqn_weights-agent-{}.h5f'.format(c, i_agent))
+        agents[i_agent].load_weights('experiments/20191014-13-30-26/run-0/contracting-{}/dqn_weights-agent-{}.h5f'.format(c, i_agent))
 
     combined_frames = []
     for i_episode in range(episodes):
@@ -177,7 +177,8 @@ def main():
                         'a{}-episode_debts'.format(i): 0.0,
                         'contracting': 0,
                         'a{}-greedy'.format(i): 0,
-                        'a{}-q_max'.format(i): np.max(q_vals[i])
+                        'a{}-q_max'.format(i): np.max(q_vals[i]),
+                        'a{}-done'.format(i): env.agents[i].done
                         } for i in range(params.nb_agents)]
 
         combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values, observations)
@@ -185,10 +186,13 @@ def main():
         for i_step in range(episode_steps):
             actions = []
             for i_ag in range(params.nb_agents):
-                if not policy_random:
-                    actions.append(agents[i_ag].forward(observations[i_ag]))
+                if not env.agents[i_ag].done:
+                    if not policy_random:
+                        actions.append(agents[i_ag].forward(observations[i_ag]))
+                    else:
+                        actions.append(np.random.randint(0, env.nb_actions))
                 else:
-                    actions.append(np.random.randint(0, env.nb_actions))
+                    actions.append(0)
 
             if contract is not None:
                 observations, r, done, info, contracting = contract.contracting_n_steps(env, observations, actions,
@@ -217,6 +221,7 @@ def main():
                     info_values[i]['contracting'] = 0
                     info_values[i]['a{}-greedy'.format(i)] = 0
                     info_values[i]['a{}-q_max'.format(i)] = np.max(q_vals[i])
+                    info_values[i]['a{}-done'.format(i)] = env.agents[i].done
 
                 combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values, observations)
 

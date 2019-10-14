@@ -165,12 +165,12 @@ class Smartfactory(gym.Env):
 
         self.colors = {
             'agent-0': (0.20392156862745098, 0.596078431372549, 0.8588235294117647),
-            'agent-1': (0.5843137254901961, 0.6470588235294118, 0.6509803921568628, 1.0),
+            'agent-1': (0.6078431372549019, 0.34901960784313724, 0.7137254901960784),  # (0.5843137254901961, 0.6470588235294118, 0.6509803921568628, 1.0),
             'outer_field': (0.5843137254901961, 0.6470588235294118, 0.6509803921568628),
             'field': (1.0, 1.0, 1.0, 1.0),
             'wall': (0.5843137254901961, 0.6470588235294118, 0.6509803921568628, 0.4),
             'checkpoint': (0.13, 0.15, 0.14, 1.0),
-            'machine-0': (0.1803921568627451, 0.8, 0.44313725490196076), # (0.6078431372549019, 0.34901960784313724, 0.7137254901960784),
+            'machine-0': (0.1803921568627451, 0.8, 0.44313725490196076),  # (0.6078431372549019, 0.34901960784313724, 0.7137254901960784),
             'machine-1': (0.9058823529411765, 0.2980392156862745, 0.23529411764705882),
             'contracting': (0.13, 0.15, 0.14, 1.0),
             'white': (1.0, 1.0, 1.0, 1.0),
@@ -378,14 +378,20 @@ class Smartfactory(gym.Env):
             agent = self.agents[i]
             if not agent.done:
                 self.set_position(agent, actions[agent.index])
+
                 if self.priorities[i]:
-                    rewards[i] += self.rewards[1]
+                    rewards[i] += -0.1
                 else:
-                    rewards[i] += self.rewards[0]
+                    rewards[i] += -0.01
+
                 if agent.process_task() >= 0:
-                    rewards[i] += 1.0
+                    rewards[i] += 1.
+
                 if agent.tasks_finished():
                     agent.done = True
+                    # if self.priorities[i] and not self.agents[(i + 1) % 2].done:
+                    #    rewards[i] += self.rewards[1]
+
 
         self.process_machines()
 
@@ -484,7 +490,7 @@ class Smartfactory(gym.Env):
 
                 if self.contracting:
                     if self.agents[agent_id].episode_debts < self.agents[(agent_id + 1) % 2].episode_debts:
-                        display_objects['debt_balance'][1].color = self.colors['debt_balance']
+                        display_objects['debt_balance'][1].color = (1.0, 1.0, 1.0, 0.0) # self.colors['debt_balance']
                     else:
                         display_objects['debt_balance'][1].color = (1.0, 1.0, 1.0, 0.0)
 
@@ -546,12 +552,12 @@ def main():
     nb_agents = 2
     nb_machine_types = 2
     nb_tasks = 3
-    field_with = field_height = 4
+    field_with = field_height = 5
 
     env = Smartfactory(nb_agents=nb_agents,
                        field_width=field_with,
                        field_height=field_height,
-                       rewards=[-0.01, -0.1],
+                       rewards=[1, 5],
                        nb_machine_types=nb_machine_types,
                        nb_tasks=nb_tasks)
     episodes = 1

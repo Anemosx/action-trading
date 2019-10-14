@@ -58,7 +58,7 @@ def train():
                 for i in range(params.nb_agents):
                     agent = build_agent(params=params, nb_actions=params.nb_actions_no_contracting_action,
                                         processor=processor)
-                    agent.load_weights('experiments/20191011-11-47-41/run-0/contracting-0/dqn_weights-agent-{}.h5f'.format(i))
+                    agent.load_weights('experiments/20191014-13-30-26/run-0/contracting-0/dqn_weights-agent-{}.h5f'.format(i))
                     contracting_agents.append(agent)
 
                 contract = Contract(agent_1=contracting_agents[0],
@@ -70,7 +70,7 @@ def train():
             fit_n_agents_n_step_contracting(env,
                                             agents=agents,
                                             nb_steps=params.nb_steps,
-                                            nb_max_episode_steps=90,
+                                            nb_max_episode_steps=120,
                                             logger=tensorboard_logger,
                                             log_dir=run_dir,
                                             contract=contract)
