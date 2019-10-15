@@ -58,7 +58,7 @@ def train():
                 for i in range(params.nb_agents):
                     agent = build_agent(params=params, nb_actions=params.nb_actions_no_contracting_action,
                                         processor=processor)
-                    agent.load_weights('experiments/20191014-13-30-26/run-0/contracting-0/dqn_weights-agent-{}.h5f'.format(i))
+                    agent.load_weights('experiments/20191014-17-56-01/run-0/contracting-0/dqn_weights-agent-{}.h5f'.format(i))
                     contracting_agents.append(agent)
 
                 contract = Contract(agent_1=contracting_agents[0],
