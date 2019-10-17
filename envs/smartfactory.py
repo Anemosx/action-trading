@@ -148,6 +148,7 @@ class Smartfactory(gym.Env):
                  field_width,
                  field_height,
                  rewards,
+                 step_penalties,
                  learning=decentral_learning,
                  contracting=0,
                  nb_machine_types=2,
@@ -226,6 +227,7 @@ class Smartfactory(gym.Env):
         self.task_positions = []
 
         self.rewards = rewards
+        self.step_penalties = step_penalties
         self.contract = False
 
         self.nb_machine_types = nb_machine_types
@@ -385,9 +387,9 @@ class Smartfactory(gym.Env):
                 self.set_position(agent, actions[agent.index])
 
                 if self.priorities[i]:
-                    rewards[i] += -0.1
+                    rewards[i] -= self.step_penalties[0]
                 else:
-                    rewards[i] += -0.01
+                    rewards[i] -=  self.step_penalties[1]
 
                 if agent.process_task() >= 0:
                     if self.priorities[i]:
