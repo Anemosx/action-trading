@@ -14,6 +14,7 @@
   "nb_machine_types": 2,
   "nb_tasks": 3,
   "rewards": [0.1, 1],
+  "step_penalties": [0.1, 0.1],
   "nb_actions_no_contracting_action": 4,
   "nb_actions_one_contracting_action": 8,
   "nb_actions_two_contracting_action": 12,
