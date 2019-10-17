@@ -22,15 +22,16 @@ def train(setting, step_penalty):
     params.contracting = setting
 
     exp_time = datetime.now().strftime('%Y%m%d-%H-%M-%S')
+    step_penalties = [[0.1, 0.1], [0.1, 0.01], [0.001]][step_penalty]
 
-    log_dir = os.path.join(os.getcwd(), 'experiments', '{}'.format(exp_time))
+    log_dir = os.path.join(os.getcwd(), 'experiments', '{}'.format(exp_time), 'step-penalty-{}'.format(step_penalties[1]))
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
     neptune.init('kyrillschmid/contracting-agents',
                  api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzNTQ1ZWQwYy0zNzZiLTRmMmMtYmY0Ny0zN2MxYWQ2NDcyYzEifQ==')
 
-    step_penalties = [[0.1, 0.1], [0.1, 0.01], [0.001]][step_penalty]
+
 
     with neptune.create_experiment(name='contracting-agents',
                                    params=params_json):
