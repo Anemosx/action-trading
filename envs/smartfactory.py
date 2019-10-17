@@ -15,6 +15,7 @@ import copy
 from copy import deepcopy
 import itertools as it
 import json
+import os
 
 
 INPUT_SHAPE = (84, 84)
@@ -178,7 +179,7 @@ class Smartfactory(gym.Env):
             'debt_balance': (0.6078431372549019, 0.34901960784313724, 0.7137254901960784)
         }
 
-        with open('/Users/kyrill/Documents/research/contracting-agents/envs/actions.json', 'r') as f:
+        with open(os.path.join(os.getcwd(), 'envs/actions.json', 'r')) as f:
             actions_json = json.load(f)
 
         self.actions = []
