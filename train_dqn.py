@@ -7,27 +7,40 @@ from visualization import TensorBoardLogger
 from datetime import datetime
 from contracting import Contract
 import json
+import neptune
+import argparse
 
 
-def train():
+def train(setting):
+
+    assert setting in [0, 2]
+
     with open('params.json', 'r') as f:
         params_json = json.load(f)
     params = DotMap(params_json)
+    params.contracting = setting
 
-    log_dir = os.path.join(os.getcwd(), 'experiments', '{}'.format(datetime.now().strftime('%Y%m%d-%H-%M-%S')))
+    exp_time = datetime.now().strftime('%Y%m%d-%H-%M-%S')
+
+    log_dir = os.path.join(os.getcwd(), 'experiments', '{}'.format(exp_time))
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
-    for run in range(1):
-        for c in [2]:
+    neptune.init('kyrillschmid/contracting-agents',
+                 api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzNTQ1ZWQwYy0zNzZiLTRmMmMtYmY0Ny0zN2MxYWQ2NDcyYzEifQ==')
 
-            params.contracting = c
-            run_dir = os.path.join(log_dir, 'run-{}'.format(run), 'contracting-{}'.format(c))
+    with neptune.create_experiment(name='contracting-agents',
+                                   params=params_json):
+        neptune.append_tag('{}-contracting-{}'.format(exp_time, setting))
+
+        for run in range(1):
+
+            run_dir = os.path.join(log_dir, 'run-{}'.format(run), 'contracting-{}'.format(setting))
             if not os.path.exists(run_dir):
                 os.makedirs(run_dir)
 
-            tensorboard_logger = TensorBoardLogger(log_dir=run_dir)
-            tensorboard_logger.compile()
+            # tensorboard_logger = TensorBoardLogger(log_dir=run_dir)
+            # tensorboard_logger.compile()
             model_dir = os.path.join(run_dir, 'models')
             if not os.path.exists(model_dir):
                 os.makedirs(model_dir)
@@ -36,7 +49,7 @@ def train():
                                field_width=params.field_width,
                                field_height=params.field_height,
                                rewards=params.rewards,
-                               contracting=c,
+                               contracting=setting,
                                nb_machine_types=params.nb_machine_types,
                                nb_tasks=params.nb_tasks
                                )
@@ -53,12 +66,12 @@ def train():
             # agents[1].load_weights('experiments/20190923-10-58-52/run-0/contracting-2/dqn_weights-agent-1.h5f')
 
             contract = None
-            if c > 0:
+            if setting > 0:
                 contracting_agents = []
                 for i in range(params.nb_agents):
                     agent = build_agent(params=params, nb_actions=params.nb_actions_no_contracting_action,
                                         processor=processor)
-                    agent.load_weights('experiments/20191014-17-56-01/run-0/contracting-0/dqn_weights-agent-{}.h5f'.format(i))
+                    agent.load_weights('experiments/20191014-17-56-01/run-0/contracting-0/dqn_weights-agent-{}.h5f'.format(0))
                     contracting_agents.append(agent)
 
                 contract = Contract(agent_1=contracting_agents[0],
@@ -71,7 +84,7 @@ def train():
                                             agents=agents,
                                             nb_steps=params.nb_steps,
                                             nb_max_episode_steps=120,
-                                            logger=tensorboard_logger,
+                                            logger=neptune,
                                             log_dir=run_dir,
                                             contract=contract)
 
@@ -80,4 +93,7 @@ def train():
 
 
 if __name__ == '__main__':
-    train()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("setting", help="Choose the setting, i.e., 0-number_settings", metavar="SETTING", type=int)
+    args = parser.parse_args()
+    train(args.setting)

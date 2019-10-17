@@ -339,6 +339,7 @@ def fit_n_agents_n_step_contracting(env,
     episode_steps = 0
     accumulated_transfer = np.zeros(len(agents))
     episode_contracts = 0
+    agents_done = [False for _ in range(len(agents))]
 
     for agent in agents:
         agent.step = 0
@@ -351,6 +352,7 @@ def fit_n_agents_n_step_contracting(env,
                     episode_steps = 0
                     episode_rewards[i] = 0
                     episode_contracts = 0
+                    agents_done = [False for _ in range(len(agents))]
                     accumulated_transfer = np.zeros(len(agents))
                     greedy = [False, False]
                     # Obtain the initial observation by resetting the environment.
@@ -373,7 +375,7 @@ def fit_n_agents_n_step_contracting(env,
                     if agent.processor is not None:
                         actions[i] = agent.processor.process_action(actions[i])
                 else:
-                    actions.append(0)
+                    actions.append(np.random.randint(0, 4))
 
             if contract is not None:
                 observations, r, done, info, contracting = contract.contracting_n_steps(env, observations, actions)
@@ -382,7 +384,7 @@ def fit_n_agents_n_step_contracting(env,
 
             observations = deepcopy(observations)
 
-            if contract is not None:
+            if contract is not None and not any([agent.done for agent in env.agents]):
                 r, transfer = contract.get_compensated_rewards(env=env, rewards=r)
                 accumulated_transfer += transfer
 
@@ -393,28 +395,48 @@ def fit_n_agents_n_step_contracting(env,
             if nb_max_episode_steps and episode_steps >= nb_max_episode_steps - 1:
                 # Force a terminal state.
                 done = True
+                for agent in env.agents:
+                    agent.done = True
+
 
             for i, agent in enumerate(agents):
-                metrics = agent.backward(r[i], terminal=done)
-                episode_rewards[i] += r[i]
-                agent.step += 1
-            episode_steps += 1
 
-            if done:
-                for i, agent in enumerate(agents):
+                if not agents_done[i]:
+                    metrics = agent.backward(r[i], terminal=done)
+                    episode_rewards[i] += r[i]
+                    agent.step += 1
+
+                if env.agents[i].done and not agents_done[i]:
                     agent.forward(observations[i])
                     agent.backward(0., terminal=False)
 
+                if env.agents[i].done:
+                    agents_done[i] = True
+
+            episode_steps += 1
+
+            if done:
                 ep_stats = [episode, (contract is not None), np.sum(episode_rewards), int(episode_contracts), episode_steps]
 
-                logger.write_log('episode_return', np.sum(episode_rewards), episode)
-                logger.write_log('contracting', int(episode_contracts), episode)
-                logger.write_log('episode_steps', episode_steps, episode)
+                #logger.write_log('episode_return', np.sum(episode_rewards), episode)
+                #logger.write_log('contracting', int(episode_contracts), episode)
+                #logger.write_log('episode_steps', episode_steps, episode)
+
+                # logger.log_metric('iteration', episode)
+                logger.log_metric('episode_return', np.sum(episode_rewards))
+                logger.log_metric('episode_steps', episode_steps)
+
 
                 for i_ag in range(len(agents)):
-                    logger.write_log('episode_return_agent-{}'.format(i_ag), episode_rewards[i_ag], episode)
-                    logger.write_log('accumulated_transfer_a-{}'.format(i_ag), accumulated_transfer[i_ag], episode)
-                    logger.write_log('episode-compensations-{}'.format(i_ag), env.agents[i_ag].episode_debts, episode)
+                    #logger.write_log('episode_return_agent-{}'.format(i_ag), episode_rewards[i_ag], episode)
+                    #logger.write_log('accumulated_transfer_a-{}'.format(i_ag), accumulated_transfer[i_ag], episode)
+                    #logger.write_log('episode-compensations-{}'.format(i_ag), env.agents[i_ag].episode_debts, episode)
+
+                    logger.log_metric('episode_return_agent-{}'.format(i_ag), episode_rewards[i_ag])
+                    logger.log_metric('accumulated_transfer_a-{}'.format(i_ag), accumulated_transfer[i_ag])
+                    logger.log_metric('episode-compensations-{}'.format(i_ag).format(i_ag), env.agents[i_ag].episode_debts)
+
+
 
                     ag_stats = [episode_rewards[i_ag], accumulated_transfer[i_ag]]
                     ep_stats += ag_stats
@@ -425,6 +447,7 @@ def fit_n_agents_n_step_contracting(env,
                 episode_steps = 0
                 episode_rewards = [None for _ in agents]
                 episode_contracts = 0
+                agents_done = [False for _ in range(len(agents))]
                 episode += 1
 
         df.to_csv(os.path.join(log_dir, 'train-values-contracting-{}.csv'.format(contract is not None)))

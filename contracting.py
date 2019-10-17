@@ -73,7 +73,7 @@ class Contract:
 
                     combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values)
 
-                if done:
+                if any([agent.done for agent in env.agents]):
                     break
 
             return observations, rewards, done, info, contracting
@@ -143,7 +143,7 @@ def main():
         contracting_agents = []
         for i in range(params.nb_agents):
             agent = build_agent(params=params, nb_actions=params.nb_actions_no_contracting_action, processor=processor)
-            agent.load_weights('experiments/20191011-17-49-29/run-0/contracting-0/dqn_weights-agent-{}.h5f'.format(i))
+            agent.load_weights('experiments/20191015-09-39-50/run-0/contracting-0/dqn_weights-agent-{}.h5f'.format(i))
             contracting_agents.append(agent)
         contract = Contract(agent_1=contracting_agents[0],
                             agent_2=contracting_agents[1],
@@ -155,7 +155,7 @@ def main():
     for i_agent in range(params.nb_agents):
         agent = build_agent(params=params, nb_actions=env.nb_contracting_actions, processor=processor)
         agents.append(agent)
-        agents[i_agent].load_weights('experiments/20191014-13-30-26/run-0/contracting-{}/dqn_weights-agent-{}.h5f'.format(c, i_agent))
+        agents[i_agent].load_weights('experiments/20191015-16-37-33/run-0/contracting-{}/dqn_weights-agent-{}.h5f'.format(c, i_agent))
 
     combined_frames = []
     for i_episode in range(episodes):
@@ -202,7 +202,7 @@ def main():
 
             observations = deepcopy(observations)
 
-            if contract is not None:
+            if contract is not None and not any([agent.done for agent in env.agents]):
                 r, transfer = contract.get_compensated_rewards(env=env, rewards=r)
                 accumulated_transfer += transfer
             episode_rewards += r

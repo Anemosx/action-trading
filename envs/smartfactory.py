@@ -165,7 +165,7 @@ class Smartfactory(gym.Env):
 
         self.colors = {
             'agent-0': (0.20392156862745098, 0.596078431372549, 0.8588235294117647),
-            'agent-1': (0.6078431372549019, 0.34901960784313724, 0.7137254901960784),  # (0.5843137254901961, 0.6470588235294118, 0.6509803921568628, 1.0),
+            'agent-1': (0.5843137254901961, 0.6470588235294118, 0.6509803921568628, 1.0),
             'outer_field': (0.5843137254901961, 0.6470588235294118, 0.6509803921568628),
             'field': (1.0, 1.0, 1.0, 1.0),
             'wall': (0.5843137254901961, 0.6470588235294118, 0.6509803921568628, 0.4),
@@ -373,6 +373,10 @@ class Smartfactory(gym.Env):
                 joint_actions.append(self.actions[actions[i_ag]])
             actions = joint_actions
 
+        if any([agent.done for agent in self.agents]):
+            for agent in self.agents:
+                agent.episode_debts = 0
+
         queue = np.random.choice([0, self.nb_agents-1], self.nb_agents, replace=False)
         for i in queue:
             agent = self.agents[i]
@@ -385,7 +389,10 @@ class Smartfactory(gym.Env):
                     rewards[i] += -0.01
 
                 if agent.process_task() >= 0:
-                    rewards[i] += 1.
+                    if self.priorities[i]:
+                        rewards[i] += 1.
+                    else:
+                        rewards[i] += 1.
 
                 if agent.tasks_finished():
                     agent.done = True
@@ -474,7 +481,6 @@ class Smartfactory(gym.Env):
                 else:
                     display_objects['agent-{}'.format(agent_id)][1].color = self.colors['agent-0']
 
-
                 display_objects['agent-{}'.format(agent_id)] = (10, display_objects['agent-{}'.format(agent_id)][1])
 
                 if self.priorities[agent_id]:
@@ -490,7 +496,7 @@ class Smartfactory(gym.Env):
 
                 if self.contracting:
                     if self.agents[agent_id].episode_debts < self.agents[(agent_id + 1) % 2].episode_debts:
-                        display_objects['debt_balance'][1].color = (1.0, 1.0, 1.0, 0.0) # self.colors['debt_balance']
+                        display_objects['debt_balance'][1].color = self.colors['debt_balance']
                     else:
                         display_objects['debt_balance'][1].color = (1.0, 1.0, 1.0, 0.0)
 
