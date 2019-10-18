@@ -389,13 +389,13 @@ class Smartfactory(gym.Env):
                 if self.priorities[i]:
                     rewards[i] -= self.step_penalties[0]
                 else:
-                    rewards[i] -=  self.step_penalties[1]
+                    rewards[i] -= self.step_penalties[1]
 
                 if agent.process_task() >= 0:
                     if self.priorities[i]:
                         rewards[i] += 1.
                     else:
-                        rewards[i] += 1.
+                        rewards[i] += 0.4
 
                 if agent.tasks_finished():
                     agent.done = True

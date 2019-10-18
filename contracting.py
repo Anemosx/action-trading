@@ -131,6 +131,7 @@ def main():
                        field_width=params.field_width,
                        field_height=params.field_height,
                        rewards=params.rewards,
+                       step_penalties=params.step_penalties,
                        contracting=c,
                        nb_machine_types=params.nb_machine_types,
                        nb_tasks=params.nb_tasks
@@ -155,7 +156,7 @@ def main():
     for i_agent in range(params.nb_agents):
         agent = build_agent(params=params, nb_actions=env.nb_contracting_actions, processor=processor)
         agents.append(agent)
-        agents[i_agent].load_weights('experiments/20191015-16-37-33/run-0/contracting-{}/dqn_weights-agent-{}.h5f'.format(c, i_agent))
+        agents[i_agent].load_weights('experiments/20191017-15-11-23/step-penalty-0.001/run-0.001/contracting-{}/dqn_weights-agent-{}.h5f'.format(c, i_agent))
 
     combined_frames = []
     for i_episode in range(episodes):

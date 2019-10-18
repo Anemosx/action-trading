@@ -22,7 +22,7 @@ def train(setting, step_penalty):
     params.contracting = setting
 
     exp_time = datetime.now().strftime('%Y%m%d-%H-%M-%S')
-    step_penalties = [[0.1, 0.1], [0.1, 0.01], [0.1, 0.001]][step_penalty]
+    step_penalties = [[0.4, 0.04]][step_penalty]
 
     log_dir = os.path.join(os.getcwd(), 'experiments', '{}'.format(exp_time), 'step-penalty-{}'.format(step_penalties[1]))
     if not os.path.exists(log_dir):
