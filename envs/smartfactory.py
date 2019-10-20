@@ -150,6 +150,7 @@ class Smartfactory(gym.Env):
                  rewards,
                  step_penalties,
                  learning=decentral_learning,
+                 trading=0,
                  contracting=0,
                  nb_machine_types=2,
                  nb_tasks=3):
@@ -192,6 +193,11 @@ class Smartfactory(gym.Env):
         if contracting == 2:
             self.actions = actions_json['two_contracting_actions']
 
+        self.trading = trading
+        if trading == 0:
+            self.actions = actions_json['no_trading_action']
+        if trading == 1:
+            self.actions = actions_json['one_step_trading_action']
 
         self.learning = learning
         self.nb_actions = len(self.actions)
@@ -468,6 +474,16 @@ class Smartfactory(gym.Env):
         assert any(i == 0 for i in greedy)
 
         return contracting, greedy
+
+    def check_trading(self, actions):
+        greedy = [0, 0]
+        trading = False
+
+        if self.trading == 1:
+            greedy = [1, 1]
+            trading = True
+
+        return trading, greedy
 
     def render(self, mode='human', close=False, info_values=None, agent_id=None, video=False):
         if mode == 'rgb_array':
