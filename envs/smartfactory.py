@@ -477,13 +477,24 @@ class Smartfactory(gym.Env):
 
     def check_trading(self, actions):
         greedy = [0, 0]
-        trading = False
+        suggest_trade = False
+
+        # action[2] indicates trade is available
+        # if available make agent greedy and suggest trade
+        # change color of agent to indicate trade suggestion
 
         if self.trading == 1:
-            greedy = [1, 1]
-            trading = True
+            if self.actions[actions[0]][2] == 1:
+                greedy[0] = 1
+                suggest_trade = True
+                self.colors[0] = (0.70, 0.85, 0.25, 0.0)
 
-        return trading, greedy
+            if self.actions[actions[1]][2] == 1:
+                greedy[1] = 1
+                suggest_trade = True
+                self.colors[1] = (0.70, 0.85, 0.25, 0.0)
+
+        return suggest_trade
 
     def render(self, mode='human', close=False, info_values=None, agent_id=None, video=False):
         if mode == 'rgb_array':

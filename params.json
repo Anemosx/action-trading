@@ -18,7 +18,10 @@
   "nb_actions_no_contracting_action": 4,
   "nb_actions_one_contracting_action": 8,
   "nb_actions_two_contracting_action": 12,
+  "no_trading_action": 4,
+  "one_step_trading_action": 8,
   "contracting_target_update": 0,
   "nb_contracting_steps": 10,
+  "trading_steps" : 1,
   "mark_up": 1.0
 }
