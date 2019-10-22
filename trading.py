@@ -11,10 +11,12 @@ import pandas as pd
 
 class Trade:
 
-    def __init__(self, agent_1, agent_2, mark_up=1.0):
+    def __init__(self, agent_1, agent_2, contracting_target_update=0, n_trade_steps=1, mark_up=1.0):
         self.agent_1 = agent_1
         self.agent_2 = agent_2
         self.agents = [agent_1, agent_2]
+        self.contracting_target_update = contracting_target_update
+        self.n_trade_steps = n_trade_steps
         self.mark_up = mark_up
 
     # trade suggestion
@@ -39,11 +41,45 @@ class Trade:
             q_vals_a2 = self.agents[1].compute_q_values(observations[1])
             q_vals = [q_vals_a1, q_vals_a2]
 
-            # if Q-value is higher than other
+            # calculate compensation reward depending on Q-value
 
-                # calculate compensation reward depending on Q-value
+            for i_agent, agent in enumerate(self.agents):
+                if not greedy[i_agent]:
+                    transfer = np.maximum(np.max(q_vals[i_agent]), 0) * self.mark_up
+                    env.agents[(i_agent + 1) % 2].episode_debts += transfer
 
-                # enable trade action
+            # enable trade-action by adding to existing actions
+
+            for c_step in range(self.n_trade_steps):
+                for i_agent, agent in enumerate(self.agents):
+                    if greedy[i_agent]:
+                        actions.append(self.agents[i_agent].forward(observations[i_agent]))
+                    else:
+                        actions.append(np.argmin(q_vals[i_agent]))
+
+                observations, r, done, info = env.step(actions)
+                observations = deepcopy(observations)
+
+                r, transfer = self.clarify_reward(env=env, rewards=r)
+                rewards += r
+
+                if combined_frames is not None:
+                    if info_values is not None:
+                        for i, agent in enumerate(env.agents):
+                            info_values[i]['a{}-reward'.format(i)] = r[i]
+                            info_values[i]['a{}-episode_debts'.format(i)] = env.agents[i].episode_debts
+                            info_values[i]['trading'] = 1
+                            info_values[i]['contracting'] = 0
+                            info_values[i]['a{}-greedy'.format(i)] = greedy[i]
+                            info_values[i]['a{}-q_max'.format(i)] = np.max(q_vals[i])
+
+                    combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values)
+
+                if any([agent.done for agent in env.agents]):
+                    break
+
+            return observations, rewards, done, info, trading
+
 
     # make trade action:
 
@@ -59,13 +95,21 @@ class Trade:
 
         # enable following suggested action steps
 
-    # pay reward to agent:
+    # pay reward to agent depending on Q-Value:
+
+    def clarify_reward(self, env, rewards):
+
+        transfer = [0, 0]
 
         # check if actions have been followed
+
+
 
         # make decision on paying agent depending on Q-Value
 
         # exchange reward
+
+        return r, transfer
 
 
 # test trading
@@ -100,3 +144,65 @@ def main():
                        )
 
     processor = env.SmartfactoryProcessor()
+
+    trade = None
+
+    if t != 0:
+        trading_agents = []
+        for i in range(params.nb_agents):
+            agent = build_agent(params=params, nb_actions=params.nb_actions_no_contracting_action, processor=processor)
+            agent.load_weights('experiments/20191015-09-39-50/run-0/contracting-0/dqn_weights-agent-{}.h5f'.format(i))
+            trading_agents.append(agent)
+        trade = Trade(agent_1=trading_agents[0], agent_2=trading_agents[1], contracting_target_update=params.contracting_target_update, n_trade_steps=params.nb_contracting_steps, mark_up=params.mark_up)
+
+        agents = []
+        for i_agent in range(params.nb_agents):
+            agent = build_agent(params=params, nb_actions=env.nb_contracting_actions, processor=processor)
+            agents.append(agent)
+            agents[i_agent].load_weights(
+                'experiments/20191017-15-11-23/step-penalty-0.001/run-0.001/contracting-{}/dqn_weights-agent-{}.h5f'.format(
+                    c, i_agent))
+
+        combined_frames = []
+        for i_episode in range(episodes):
+            observations = env.reset()
+            episode_rewards = np.zeros(params.nb_agents)
+            accumulated_transfer = np.zeros(params.nb_agents)
+            trading = False
+
+            if trade is not None:
+                q_vals_a1 = trade.agents[0].compute_q_values(observations[0])
+                q_vals_a2 = trade.agents[1].compute_q_values(observations[1])
+            else:
+                q_vals_a1 = agents[0].compute_q_values(observations[0])
+                q_vals_a2 = agents[1].compute_q_values(observations[1])
+            q_vals = [q_vals_a1, q_vals_a2]
+
+            info_values = [{'a{}-reward'.format(i): 0.0,
+                            'a{}-episode_debts'.format(i): 0.0,
+                            'trading': 0,
+                            'contracting': 0,
+                            'a{}-greedy'.format(i): 0,
+                            'a{}-q_max'.format(i): np.max(q_vals[i]),
+                            'a{}-done'.format(i): env.agents[i].done
+                            } for i in range(params.nb_agents)]
+
+            combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values, observations)
+
+            for i_step in range(episode_steps):
+                actions = []
+                for i_ag in range(params.nb_agents):
+                    if not env.agents[i_ag].done:
+                        if not policy_random:
+                            actions.append(agents[i_ag].forward(observations[i_ag]))
+                        else:
+                            actions.append(np.random.randint(0, env.nb_actions))
+                    else:
+                        actions.append(0)
+                if trade is not None:
+                    observations, r, done, info, contracting = trade.trade_suggestion_n_steps(env, observations, actions, combined_frames, info_values)
+                else:
+                    observations, r, done, info = env.step(actions)
+
+                observations = deepcopy(observations)
+
