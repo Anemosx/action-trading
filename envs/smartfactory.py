@@ -496,6 +496,22 @@ class Smartfactory(gym.Env):
 
         return suggest_trade
 
+    def check_follow(self, actions):
+        greedy = [0, 0]
+        follow_trade = False
+
+        if self.trading == 1:
+            if self.actions[actions[0]][3] == 1:
+                greedy[0] = 1
+                follow_trade = True
+                self.colors[0] = (1.0, 0.35, 0.0, 0.0)
+            if self.actions[actions[1]][3] == 1:
+                greedy[1] = 1
+                follow_trade = True
+                self.colors[1] = (1.0, 0.35, 0.0, 0.0)
+
+        return follow_trade
+
     def render(self, mode='human', close=False, info_values=None, agent_id=None, video=False):
         if mode == 'rgb_array':
             display_objects = self.display_objects.copy()

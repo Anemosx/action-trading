@@ -20,7 +20,7 @@ class Trade:
 
     # trade suggestion
 
-    def trade_suggestion_n_steps(self, env, observations, actions, combined_frames=None, info_values=None):
+    def trade_suggestion_n_steps(self, env, observations, actions):
 
         trading, greedy = env.check_trading(actions)
 
@@ -42,27 +42,36 @@ class Trade:
 
             # calculate compensation reward depending on Q-value
 
+            transfer = 0
+
             for i_agent, agent in enumerate(self.agents):
                 if not greedy[i_agent]:
                     transfer = np.maximum(np.max(q_vals[i_agent]), 0) * self.mark_up
 
                     #env.agents[(i_agent + 1) % 2].episode_debts += transfer
 
-            # enable trade-action by adding to existing actions
+
+
+            # storing actions for later decision
+
+            t_actions = []
 
             for t_step in range(self.n_trade_steps):
                 for i_agent, agent in enumerate(self.agents):
                     if greedy[i_agent]:
-                        actions.append(self.agents[i_agent].forward(observations[i_agent]))
+                        t_actions.append(self.agents[i_agent].forward(observations[i_agent]))
                     else:
-                        actions.append(np.argmin(q_vals[i_agent]))
+                        t_actions.append(np.argmin(q_vals[i_agent]))
 
+                '''
                 observations, r, done, info = env.step(actions)
                 observations = deepcopy(observations)
+            
 
                 r, transfer = self.clarify_reward(env=env, rewards=r, trade_reward=transfer)
                 rewards += r
-
+            
+            
                 if combined_frames is not None:
                     if info_values is not None:
                         for i, agent in enumerate(env.agents):
@@ -76,23 +85,31 @@ class Trade:
 
                 if any([agent.done for agent in env.agents]):
                     break
+            '''
+            return observations, rewards, done, info, trading, transfer, t_actions
 
-            return observations, rewards, done, info, trading
-
-
-    # make trade action:
-
-
-
-        # set flag to remember the trade related actions and reward
 
     # follow suggestion:
 
+    def follow_suggestion(self, env, observations, actions, t_actions):
+
+        done = False
+        info = None
+
         # depending on Q-value make decision to follow suggestion
 
-        # remember steps of the suggested actions
+        follow_suggestion = env.check_follow(actions)
 
-        # enable following suggested action steps
+        # follow suggested actions
+
+        rewards = 0
+
+        if follow_suggestion and t_actions is not None:
+            observations, rewards, done, info = env.step(t_actions)
+            observations = deepcopy(observations)
+
+        return observations, rewards, done, info, follow_suggestion
+
 
     # pay reward to agent depending on Q-Value:
 
@@ -188,6 +205,7 @@ def main():
 
             for i_step in range(episode_steps):
                 actions = []
+                trading = False
                 for i_ag in range(params.nb_agents):
                     if not env.agents[i_ag].done:
                         if not policy_random:
@@ -196,19 +214,28 @@ def main():
                             actions.append(np.random.randint(0, env.nb_actions))
                     else:
                         actions.append(0)
+
+                transfer = 0
+                t_actions = None
                 if trade is not None:
-                    observations, r, done, info, trading = trade.trade_suggestion_n_steps(env, observations, actions, combined_frames, info_values)
+                    observations, r, done, info, trading, transfer, t_actions = trade.trade_suggestion_n_steps(env, observations, actions)
                 else:
                     observations, r, done, info = env.step(actions)
+
+                # possibility to follow suggestion (todo)
+
+                follow_suggestion = False
+
+                if trading:
+                    observations, r, done, info, follow_suggestion = trade.follow_suggestion(env, observations, actions, t_actions)
 
                 observations = deepcopy(observations)
 
                 # payout depending on Q-Value (if Q-Value of payout is highest)
-                # has to be modified since agent has the choice
 
-                if trade is not None and not any([agent.done for agent in env.agents]):
-                    r, transfer = trade.clarify_reward(env=env, rewards=r)
-                    accumulated_transfer += transfer
+                if trade is not None and not any([agent.done for agent in env.agents]) and follow_suggestion:
+                    r, act_transfer = trade.clarify_reward(env=env, rewards=r)
+                    accumulated_transfer += act_transfer
                 episode_rewards += r
 
                 if not trading:
