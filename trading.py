@@ -48,10 +48,6 @@ class Trade:
                 if not greedy[i_agent]:
                     transfer = np.maximum(np.max(q_vals[i_agent]), 0) * self.mark_up
 
-                    #env.agents[(i_agent + 1) % 2].episode_debts += transfer
-
-
-
             # storing actions for later decision
 
             t_actions = []
@@ -88,7 +84,6 @@ class Trade:
             '''
             return observations, rewards, done, info, trading, transfer, t_actions
 
-
     # follow suggestion:
 
     def follow_suggestion(self, env, observations, actions, t_actions):
@@ -100,33 +95,29 @@ class Trade:
 
         follow_suggestion = env.check_follow(actions)
 
-        # follow suggested actions
-
         rewards = 0
-
         if follow_suggestion and t_actions is not None:
+            # follow suggested actions
             observations, rewards, done, info = env.step(t_actions)
             observations = deepcopy(observations)
 
         return observations, rewards, done, info, follow_suggestion
 
-
     # pay reward to agent depending on Q-Value:
 
     def clarify_reward(self, env, rewards, trade_reward):
 
+        #(todo)
+
         transfer = [0, 0]
+        r = [0, 0]
 
-        # check if actions have been followed
-
-
-
-        # make decision on paying agent depending on Q-Value
+        if trade_reward == 0:
+            return r, transfer
 
         # exchange reward
 
         return r, transfer
-
 
 # test trading
 
@@ -222,16 +213,16 @@ def main():
                 else:
                     observations, r, done, info = env.step(actions)
 
-                # possibility to follow suggestion (todo)
-
                 follow_suggestion = False
+
+                # enable trading possibility depending on Q-Value
 
                 if trading:
                     observations, r, done, info, follow_suggestion = trade.follow_suggestion(env, observations, actions, t_actions)
 
                 observations = deepcopy(observations)
 
-                # payout depending on Q-Value (if Q-Value of payout is highest)
+                # make decision on paying agent depending on Q-Value
 
                 if trade is not None and not any([agent.done for agent in env.agents]) and follow_suggestion:
                     r, act_transfer = trade.clarify_reward(env=env, rewards=r)
@@ -267,3 +258,6 @@ def main():
 
             df.to_csv(os.path.join('test-values-contracting-c-{}.csv'.format(0)))
             export_video('Smart-Factory-Trading.mp4', combined_frames, None)
+
+if __name__ == '__main__':
+    main()

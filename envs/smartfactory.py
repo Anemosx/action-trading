@@ -488,11 +488,15 @@ class Smartfactory(gym.Env):
                 greedy[0] = 1
                 suggest_trade = True
                 self.colors[0] = (0.70, 0.85, 0.25, 0.0)
-
-            if self.actions[actions[1]][2] == 1:
+                self.colors[1] = (0.5843137254901961, 0.6470588235294118, 0.6509803921568628, 1.0)
+            elif self.actions[actions[1]][2] == 1:
                 greedy[1] = 1
                 suggest_trade = True
+                self.colors[0] = (0.20392156862745098, 0.596078431372549, 0.8588235294117647)
                 self.colors[1] = (0.70, 0.85, 0.25, 0.0)
+            else:
+                self.colors[0] = (0.20392156862745098, 0.596078431372549, 0.8588235294117647)
+                self.colors[1] = (0.5843137254901961, 0.6470588235294118, 0.6509803921568628, 1.0)
 
         return suggest_trade
 
@@ -505,6 +509,7 @@ class Smartfactory(gym.Env):
                 greedy[0] = 1
                 follow_trade = True
                 self.colors[0] = (1.0, 0.35, 0.0, 0.0)
+                self.colors[1] = (1.0, 0.35, 0.0, 0.0)
             if self.actions[actions[1]][3] == 1:
                 greedy[1] = 1
                 follow_trade = True
