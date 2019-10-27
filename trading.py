@@ -43,6 +43,7 @@ class Trade:
             # calculate compensation reward depending on Q-value
 
             transfer = 0
+            pay_to = None
 
             for i_agent, agent in enumerate(self.agents):
                 if not greedy[i_agent]:
@@ -58,8 +59,9 @@ class Trade:
                         t_actions.append(self.agents[i_agent].forward(observations[i_agent]))
                     else:
                         t_actions.append(np.argmin(q_vals[i_agent]))
+                        pay_to = i_agent
 
-                '''
+            '''
                 observations, r, done, info = env.step(actions)
                 observations = deepcopy(observations)
             
@@ -82,7 +84,7 @@ class Trade:
                 if any([agent.done for agent in env.agents]):
                     break
             '''
-            return observations, rewards, done, info, trading, transfer, t_actions
+            return observations, rewards, done, info, trading, transfer, t_actions, pay_to
 
     # follow suggestion:
 
@@ -105,17 +107,21 @@ class Trade:
 
     # pay reward to agent depending on Q-Value:
 
-    def clarify_reward(self, env, rewards, trade_reward):
-
-        #(todo)
+    def clarify_reward(self, env, rewards, trade_reward, pay_to):
 
         transfer = [0, 0]
-        r = [0, 0]
+        r = rewards
 
         if trade_reward == 0:
             return r, transfer
 
-        # exchange reward
+        for i_transfer in range(r):
+            if i_transfer == pay_to:
+                r[i_transfer] += trade_reward
+            else:
+                r[i_transfer] -= trade_reward
+
+        transfer[pay_to] += trade_reward
 
         return r, transfer
 
@@ -126,7 +132,7 @@ def main():
         params_json = json.load(f)
     params = DotMap(params_json)
 
-    t = 0
+    t = 1
     policy_random = False
     episodes = 1
     episode_steps = 100
@@ -207,9 +213,10 @@ def main():
                         actions.append(0)
 
                 transfer = 0
+                pay_to = None
                 t_actions = None
                 if trade is not None:
-                    observations, r, done, info, trading, transfer, t_actions = trade.trade_suggestion_n_steps(env, observations, actions)
+                    observations, r, done, info, trading, transfer, t_actions, pay_to = trade.trade_suggestion_n_steps(env, observations, actions)
                 else:
                     observations, r, done, info = env.step(actions)
 
@@ -225,7 +232,7 @@ def main():
                 # make decision on paying agent depending on Q-Value
 
                 if trade is not None and not any([agent.done for agent in env.agents]) and follow_suggestion:
-                    r, act_transfer = trade.clarify_reward(env=env, rewards=r)
+                    r, act_transfer = trade.clarify_reward(env=env, rewards=r, trade_reward=transfer, pay_to=pay_to)
                     accumulated_transfer += act_transfer
                 episode_rewards += r
 
@@ -257,7 +264,7 @@ def main():
                     break
 
             df.to_csv(os.path.join('test-values-contracting-c-{}.csv'.format(0)))
-            export_video('Smart-Factory-Trading.mp4', combined_frames, None)
+    export_video('Smart-Factory-Trading.mp4', combined_frames, None)
 
 if __name__ == '__main__':
     main()
