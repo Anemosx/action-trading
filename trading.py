@@ -61,6 +61,9 @@ class Trade:
                         t_actions.append(np.argmin(q_vals[i_agent]))
                         pay_to = i_agent
 
+            observations, r, done, info = env.step(actions)
+            observations = deepcopy(observations)
+
             '''
                 observations, r, done, info = env.step(actions)
                 observations = deepcopy(observations)
@@ -107,12 +110,14 @@ class Trade:
 
     # pay reward to agent depending on Q-Value:
 
-    def clarify_reward(self, env, rewards, trade_reward, pay_to):
+    def clarify_reward(self, env, rewards, actions, trade_reward, pay_to):
+
+        pay = env.check_payout(actions)
 
         transfer = [0, 0]
         r = rewards
 
-        if trade_reward == 0:
+        if trade_reward == 0 or not pay:
             return r, transfer
 
         for i_transfer in range(r):
@@ -232,7 +237,7 @@ def main():
                 # make decision on paying agent depending on Q-Value
 
                 if trade is not None and not any([agent.done for agent in env.agents]) and follow_suggestion:
-                    r, act_transfer = trade.clarify_reward(env=env, rewards=r, trade_reward=transfer, pay_to=pay_to)
+                    r, act_transfer = trade.clarify_reward(env, r, actions, transfer, pay_to)
                     accumulated_transfer += act_transfer
                 episode_rewards += r
 
@@ -264,7 +269,7 @@ def main():
                     break
 
             df.to_csv(os.path.join('test-values-contracting-c-{}.csv'.format(0)))
-    export_video('Smart-Factory-Trading.mp4', combined_frames, None)
+            export_video('Smart-Factory-Trading.mp4', combined_frames, None)
 
 if __name__ == '__main__':
     main()

@@ -509,13 +509,24 @@ class Smartfactory(gym.Env):
                 greedy[0] = 1
                 follow_trade = True
                 self.colors[0] = (1.0, 0.35, 0.0, 0.0)
-                self.colors[1] = (1.0, 0.35, 0.0, 0.0)
             if self.actions[actions[1]][3] == 1:
                 greedy[1] = 1
                 follow_trade = True
                 self.colors[1] = (1.0, 0.35, 0.0, 0.0)
 
         return follow_trade
+
+    def check_payout(self, actions, pay_to):
+        pay = False
+
+        if pay_to == 0 and self.actions[actions[1]][2] == 1 and self.actions[actions[1]][3] == 1:
+            pay = True
+            self.colors[1] = (1.0, 0.60, 0.80, 0.0)
+        if pay_to == 1 and self.actions[actions[0]][2] == 1 and self.actions[actions[0]][3] == 1:
+            pay = True
+            self.colors[1] = (1.0, 0.60, 0.80, 0.0)
+
+        return pay
 
     def render(self, mode='human', close=False, info_values=None, agent_id=None, video=False):
         if mode == 'rgb_array':
