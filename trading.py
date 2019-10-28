@@ -100,13 +100,14 @@ class Trade:
 
         follow_suggestion = env.check_follow(actions)
 
-        rewards = 0
         if follow_suggestion and t_actions is not None:
             # follow suggested actions
-            observations, rewards, done, info = env.step(t_actions)
+            observations, t_action_rewards, done, info = env.step(t_actions)
             observations = deepcopy(observations)
+        else:
+            return observations, env.rewards, done, info, follow_suggestion
 
-        return observations, rewards, done, info, follow_suggestion
+        return observations, t_action_rewards, done, info, follow_suggestion
 
     # pay reward to agent depending on Q-Value:
 
@@ -114,7 +115,7 @@ class Trade:
 
         pay = env.check_payout(actions)
 
-        transfer = [0, 0]
+        transfer = np.zeros(2)
         r = rewards
 
         if trade_reward == 0 or not pay:
@@ -174,7 +175,7 @@ def main():
 
         agents = []
         for i_agent in range(params.nb_agents):
-            agent = build_agent(params=params, nb_actions=env.nb_contracting_actions, processor=processor)
+            agent = build_agent(params=params, nb_actions=env.nb_actions, processor=processor)
             agents.append(agent)
             agents[i_agent].load_weights(
                 'experiments/20191017-15-11-23/step-penalty-0.001/run-0.001/contracting-{}/dqn_weights-agent-{}.h5f'.format(
@@ -225,14 +226,15 @@ def main():
                 else:
                     observations, r, done, info = env.step(actions)
 
+                observations = deepcopy(observations)
+
                 follow_suggestion = False
 
                 # enable trading possibility depending on Q-Value
 
                 if trading:
                     observations, r, done, info, follow_suggestion = trade.follow_suggestion(env, observations, actions, t_actions)
-
-                observations = deepcopy(observations)
+                    observations = deepcopy(observations)
 
                 # make decision on paying agent depending on Q-Value
 
@@ -268,7 +270,7 @@ def main():
                     df.loc[i_episode] = ep_stats
                     break
 
-            df.to_csv(os.path.join('test-values-contracting-c-{}.csv'.format(0)))
+            df.to_csv(os.path.join('test-values-trading-t-{}.csv'.format(0)))
             export_video('Smart-Factory-Trading.mp4', combined_frames, None)
 
 if __name__ == '__main__':
