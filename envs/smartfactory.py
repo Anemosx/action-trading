@@ -105,6 +105,10 @@ class GridCell:
             self.color = env.colors['machine-0']
         elif self.typ == 1:
             self.color = env.colors['machine-1']
+        elif self.typ == 'trade-0':
+            self.color = env.colors['trade-0']
+        elif self.typ == 'trade-1':
+            self.color = env.colors['trade-1']
         else:
             self.color = env.colors['field']
 
@@ -150,7 +154,8 @@ class Smartfactory(gym.Env):
                  rewards,
                  step_penalties,
                  learning=decentral_learning,
-                 trading=0,
+                 trading=1,
+                 trading_steps=1,
                  contracting=0,
                  nb_machine_types=2,
                  nb_tasks=3):
@@ -178,7 +183,9 @@ class Smartfactory(gym.Env):
             'contracting': (0.13, 0.15, 0.14, 1.0),
             'white': (1.0, 1.0, 1.0, 1.0),
             'dark': (0.13, 0.15, 0.14, 1.0),
-            'debt_balance': (0.6078431372549019, 0.34901960784313724, 0.7137254901960784)
+            'debt_balance': (0.6078431372549019, 0.34901960784313724, 0.7137254901960784),
+            'trade-0': (1.0, 1.0, 1.0),
+            'trade-1': (1.0, 1.0, 1.0),
         }
 
         with open(os.path.join(os.getcwd(), 'envs/actions.json'), 'r') as f:
@@ -198,6 +205,8 @@ class Smartfactory(gym.Env):
             self.actions = actions_json['no_trading_action']
         if trading == 1:
             self.actions = actions_json['one_step_trading_action']
+
+        self.actions_log = []
 
         self.learning = learning
         self.nb_actions = len(self.actions)
@@ -235,6 +244,8 @@ class Smartfactory(gym.Env):
         self.rewards = rewards
         self.step_penalties = step_penalties
         self.contract = False
+
+        self.trading_steps = trading_steps
 
         self.nb_machine_types = nb_machine_types
         self.nb_tasks = nb_tasks
@@ -288,6 +299,9 @@ class Smartfactory(gym.Env):
 
         self.task_positions = [(-self.field_width/2 + (1 + (i * 2)),
                                 -self.field_height/2 + -1) for i in range(self.nb_tasks)]
+
+        self.trade_positions = [(-self.field_width / 2 + 7,
+                                 -self.field_height / 2 + 5 - (i * 2)) for i in range(self.trading_steps * 2)]
 
         self.debt_balance_position = [(-self.field_width/2 + 3, self.field_height/2 + 2)]
 
@@ -349,6 +363,17 @@ class Smartfactory(gym.Env):
                                             drawing_layer=0,
                                             color=(1.0, 1.0, 1.0, 0.0))
 
+        for i, trade_pos in enumerate(self.trade_positions):
+            drawing_util.add_polygon_at_pos(self.display_objects,
+                                            position=(trade_pos[0], trade_pos[1]),
+                                            vertices=self.agents[0].agent_vertices,
+                                            name='trade-{}'.format(i),
+                                            drawing_layer=0,
+                                            color=self.colors['trade-{}'.format(i)])
+
+        # command for changing color
+        #self.display_objects['trade-0'][1].color = self.colors['trade-0']
+
         self._create_field()
 
         return self.observation
@@ -391,6 +416,8 @@ class Smartfactory(gym.Env):
             agent = self.agents[i]
             if not agent.done:
                 self.set_position(agent, actions[agent.index])
+                self.set_log(i, actions[agent.index])
+                self.change_trade_colors(i, actions[agent.index])
 
                 if self.priorities[i]:
                     rewards[i] -= self.step_penalties[0]
@@ -405,6 +432,7 @@ class Smartfactory(gym.Env):
 
                 if agent.tasks_finished():
                     agent.done = True
+                    self.change_trade_colors(i, [0.0, 0.0, 5.0, 0.0])
                     # if self.priorities[i] and not self.agents[(i + 1) % 2].done:
                     #    rewards[i] += self.rewards[1]
 
@@ -476,57 +504,42 @@ class Smartfactory(gym.Env):
         return contracting, greedy
 
     def check_trading(self, actions):
-        greedy = [0, 0]
-        suggest_trade = False
+        trading_val = False
+        if self.trading==1:
+            if self.actions[actions[0]][2] != 0 or self.actions[actions[0]][3] != 0:
+                trading_val = True
+            if self.actions[actions[1]][2] != 0 or self.actions[actions[1]][3] != 0:
+                trading_val = True
+        return trading_val
 
-        # action[2] indicates trade is available
-        # if available make agent greedy and suggest trade
-        # change color of agent to indicate trade suggestion
+    def set_log(self, agent_index, action):
+        taken_action = [agent_index, action]
+        self.actions_log.append(taken_action)
+        print(self.actions_log)
 
-        if self.trading == 1:
-            if self.actions[actions[0]][2] == 1:
-                greedy[0] = 1
-                suggest_trade = True
-                self.colors[0] = (0.70, 0.85, 0.25, 0.0)
-                self.colors[1] = (0.5843137254901961, 0.6470588235294118, 0.6509803921568628, 1.0)
-            elif self.actions[actions[1]][2] == 1:
-                greedy[1] = 1
-                suggest_trade = True
-                self.colors[0] = (0.20392156862745098, 0.596078431372549, 0.8588235294117647)
-                self.colors[1] = (0.70, 0.85, 0.25, 0.0)
-            else:
-                self.colors[0] = (0.20392156862745098, 0.596078431372549, 0.8588235294117647)
-                self.colors[1] = (0.5843137254901961, 0.6470588235294118, 0.6509803921568628, 1.0)
+    def check_suggested_steps(self, trading_steps):
+        step_actions = []
+        for i in range(self.nb_agents * trading_steps + self.nb_agents):
+            if len(self.actions_log) >= (self.nb_agents * trading_steps + self.nb_agents):
+                step_actions.append(self.actions_log.pop())
+        return step_actions
 
-        return suggest_trade
+    def change_trade_colors(self, agent_index, action):
 
-    def check_follow(self, actions):
-        greedy = [0, 0]
-        follow_trade = False
+        if action[3] == 1.0:  # up # yellow
+            self.colors['trade-{}'.format(agent_index)] = (1.0, 1.0, 0.0)
+        if action[3] == -1.0:  # down # green
+            self.colors['trade-{}'.format(agent_index)] = (0.0, 1.0, 0.0)
+        if action[2] == -1.0:  # left # lightblue
+            self.colors['trade-{}'.format(agent_index)] = (0.0, 1.0, 1.0)
+        if action[2] == 1.0:  # right # darkblue
+            self.colors['trade-{}'.format(agent_index)] = (0.0, 0.0, 1.0)
 
-        if self.trading == 1:
-            if self.actions[actions[0]][3] == 1:
-                greedy[0] = 1
-                follow_trade = True
-                self.colors[0] = (1.0, 0.35, 0.0, 0.0)
-            if self.actions[actions[1]][3] == 1:
-                greedy[1] = 1
-                follow_trade = True
-                self.colors[1] = (1.0, 0.35, 0.0, 0.0)
+        # remove trade signal
+        if action[2] == 5.0:
+            self.colors['trade-{}'.format(agent_index)] = (0.0, 0.0, 0.0, 0.0)
 
-        return follow_trade
-
-    def check_payout(self, actions, pay_to):
-        pay = False
-
-        if pay_to == 0 and self.actions[actions[1]][2] == 1 and self.actions[actions[1]][3] == 1:
-            pay = True
-            self.colors[1] = (1.0, 0.60, 0.80, 0.0)
-        if pay_to == 1 and self.actions[actions[0]][2] == 1 and self.actions[actions[0]][3] == 1:
-            pay = True
-            self.colors[1] = (1.0, 0.60, 0.80, 0.0)
-
-        return pay
+        self.display_objects['trade-{}'.format(agent_index)][1].color = self.colors['trade-{}'.format(agent_index)]
 
     def render(self, mode='human', close=False, info_values=None, agent_id=None, video=False):
         if mode == 'rgb_array':
@@ -626,6 +639,7 @@ def main():
                        field_width=field_with,
                        field_height=field_height,
                        rewards=[1, 5],
+                       step_penalties=[0.1, 0.1],
                        nb_machine_types=nb_machine_types,
                        nb_tasks=nb_tasks)
     episodes = 1
