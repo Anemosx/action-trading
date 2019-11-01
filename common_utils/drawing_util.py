@@ -271,7 +271,7 @@ def render_combined_frames(combined_frames, env, info_values, observations=False
     if observations:
         for i_ag in range(env.nb_agents):
             scipy.misc.toimage(observations[i_ag], cmin=0.0, cmax=...).save(
-                'observations/new-outfile-{}-ag-{}.jpg'.format(0, i_ag))
+                'envs/observations/new-outfile-{}-ag-{}.jpg'.format(0, i_ag))
 
     return combined_frames
 

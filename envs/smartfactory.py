@@ -154,8 +154,9 @@ class Smartfactory(gym.Env):
                  rewards,
                  step_penalties,
                  learning=decentral_learning,
-                 trading=1,
-                 trading_steps=1,
+                 trading=0,
+                 trading_steps=0,
+                 trading_actions=None,
                  contracting=0,
                  nb_machine_types=2,
                  nb_tasks=3):
@@ -193,18 +194,22 @@ class Smartfactory(gym.Env):
 
         self.actions = []
         self.contracting = contracting
-        if contracting == 0:
-            self.actions = actions_json['no_contracting_action']
-        if contracting == 1:
-            self.actions = actions_json['one_contracting_action']
-        if contracting == 2:
-            self.actions = actions_json['two_contracting_actions']
+        # if contracting == 0:
+        #     self.actions = actions_json['no_contracting_action']
+        # if contracting == 1:
+        #     self.actions = actions_json['one_contracting_action']
+        # if contracting == 2:
+        #     self.actions = actions_json['two_contracting_actions']
 
         self.trading = trading
+        self.trading_steps = trading_steps
+        self.trading_actions = trading_actions
         if trading == 0:
-            self.actions = actions_json['no_trading_action']
+            self.actions = trading_actions
+            #self.actions = actions_json['no_trading_action']
         if trading == 1:
-            self.actions = actions_json['one_step_trading_action']
+            if trading_actions is not None:
+                self.actions = trading_actions
 
         self.actions_log = []
 
@@ -244,8 +249,6 @@ class Smartfactory(gym.Env):
         self.rewards = rewards
         self.step_penalties = step_penalties
         self.contract = False
-
-        self.trading_steps = trading_steps
 
         self.nb_machine_types = nb_machine_types
         self.nb_tasks = nb_tasks
@@ -416,8 +419,9 @@ class Smartfactory(gym.Env):
             agent = self.agents[i]
             if not agent.done:
                 self.set_position(agent, actions[agent.index])
-                self.set_log(i, actions[agent.index])
-                self.change_trade_colors(i, actions[agent.index])
+                if self.trading != 0 and self.trading_steps != 0:
+                    self.set_log(i, actions[agent.index])
+                    self.change_trade_colors(i, actions[agent.index])
 
                 if self.priorities[i]:
                     rewards[i] -= self.step_penalties[0]
@@ -432,7 +436,8 @@ class Smartfactory(gym.Env):
 
                 if agent.tasks_finished():
                     agent.done = True
-                    self.change_trade_colors(i, [0.0, 0.0, 5.0, 0.0])
+                    if self.trading != 0 and self.trading_steps != 0:
+                        self.change_trade_colors(i, [0.0, 0.0, 5.0, 0.0])
                     # if self.priorities[i] and not self.agents[(i + 1) % 2].done:
                     #    rewards[i] += self.rewards[1]
 
@@ -505,7 +510,7 @@ class Smartfactory(gym.Env):
 
     def check_trading(self, actions):
         trading_val = False
-        if self.trading==1:
+        if self.trading != 0 and self.trading_steps != 0:
             if self.actions[actions[0]][2] != 0 or self.actions[actions[0]][3] != 0:
                 trading_val = True
             if self.actions[actions[1]][2] != 0 or self.actions[actions[1]][3] != 0:
