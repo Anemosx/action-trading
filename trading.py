@@ -37,85 +37,72 @@ class Trade:
         self.agent_1 = agent_1
         self.agent_2 = agent_2
         self.agents = [agent_1, agent_2]
+        self.agent_count = 2
         self.n_trade_steps = n_trade_steps
         self.mark_up = mark_up
 
-    # trade suggestion
+    # trading part of step
 
-    def trade_n_steps(self, env, observations, actions):
+    def update_trading(self, env, actions, suggested_steps, new_trade, transfer):
+        for i_agents in range(self.agent_count):
+            if suggested_steps[i_agents] is []:
+                new_trade[i_agents] = True
+            else:
+                new_trade[i_agents] = False
 
-        trading = env.check_trading(actions)
-        transfer = 0
+        observations, r, done, info = env.step(actions)
+        observations = deepcopy(observations)
 
-        if not trading:
-            observations, r, done, info = env.step(actions)
-            return observations, r, done, info, transfer, trading
+        act_transfer = np.zeros(self.agent_count)
+        current_actions = env.get_current_actions()
+        print(current_actions)
 
+        for i_agents in range(self.agent_count):
+            agent_of_action = current_actions[i_agents][0]
+            if suggested_steps[0] != [] and suggested_steps[1] != []:
+                if suggested_steps[agent_of_action][0] == current_actions[i_agents][1][0] and \
+                        suggested_steps[agent_of_action][1] == current_actions[i_agents][1][1]:
+                    del suggested_steps[agent_of_action][0]
+                    del suggested_steps[agent_of_action][1]
+                    if suggested_steps[agent_of_action] is None:
+                        r, transfer, act_agent_transfer = self.pay_reward(agent_of_action % 2, agent_of_action, r, transfer)
+                        act_transfer[agent_of_action] += act_agent_transfer
+                else:
+                    suggested_steps[agent_of_action] = []
+
+            if new_trade[i_agents]:
+                copy_action_from = i_agents % 2
+                del current_actions[copy_action_from][0]
+                del current_actions[copy_action_from][1]
+                if current_actions[copy_action_from][0] != 0.0 and current_actions[copy_action_from][1] != 0.0:
+                    for i_trading_steps in range(len(current_actions[copy_action_from][1])):
+                        suggested_steps[i_agents].append(current_actions[copy_action_from][1][i_trading_steps])
+
+                    if copy_action_from == 0:
+                        q_val = self.agent_1.compute_q_values(observations[0])
+                    else:
+                        q_val = self.agent_2.compute_q_values(observations[1])
+                    transfer[i_agents] = np.max(q_val)
+                    new_trade[i_agents] = False
+
+        return observations, r, done, info, suggested_steps, new_trade, transfer, act_transfer
+
+    def pay_reward(self, payer, receiver, rewards, transfer_value):
+        new_rewards = []
+        new_transfer = []
+        act_transfer = 0
+
+        if rewards[payer]-transfer_value[receiver] > 0:
+            new_rewards[payer] = rewards[payer] - transfer_value[receiver]
+            new_rewards[receiver] = rewards[receiver] + transfer_value[receiver]
+            act_transfer = transfer_value[receiver]
         else:
+            new_rewards = rewards
 
-            rewards = np.zeros(2)
-            done = False
-            info = None
+        new_transfer[payer] = transfer_value[payer]
+        new_transfer[receiver] = 0
 
-            # get agents Q-values
-
-            q_vals_a1 = self.agents[0].compute_q_values(observations[0])
-            q_vals_a2 = self.agents[1].compute_q_values(observations[1])
-            q_vals = [q_vals_a1, q_vals_a2]
-            transfer = max(q_vals)
-
-            # calculate compensation reward depending on Q-value
-
-            # transfer = 0
-            # pay_to = None
-
-            # for i_agent, agent in enumerate(self.agents):
-            #     if not greedy[i_agent]:
-            #         transfer = np.maximum(np.max(q_vals[i_agent]), 0) * self.mark_up
-
-            # storing actions for later decision
-            # t_actions = []
-            #
-            # for t_step in range(self.n_trade_steps):
-            #     for i_agent, agent in enumerate(self.agents):
-            #         if greedy[i_agent]:
-            #             t_actions.append(self.agents[i_agent].forward(observations[i_agent]))
-            #         else:
-            #             t_actions.append(np.argmin(q_vals[i_agent]))
-            #             pay_to = i_agent
-
-            observations, r, done, info = env.step(actions)
-            observations = deepcopy(observations)
-            return observations, rewards, done, info, transfer, trading
-
-    def exchange_reward(self, env, rewards, suggested_steps, transfer):
-        transfer_reward = transfer
-        r = rewards
-
-        suggested_action = []
-        current_actions = []
-        if len(env.actions_log) >= (env.nb_agents * env.trading_steps + env.nb_agents):
-            for i_last in range(env.nb_agents):
-                current_actions.append(suggested_steps(env.nb_agents * env.trading_steps + i_last))
-            for i_suggested in range(env.nb_agents * env.trading_steps):
-                suggested_action.append(suggested_steps(i_suggested))
-
-            if current_actions[0] == 0:
-                if suggested_action[0] == 1:
-                    if current_actions[0][1] == suggested_action[0][3] and current_actions[0][0] == suggested_action[0][2]:
-                        r[0] += transfer_reward
-                if suggested_action[1] == 1:
-                    if current_actions[0][1] == suggested_action[1][3] and current_actions[0][0] == suggested_action[1][2]:
-                        r[0] += transfer_reward
-            if current_actions[0] == 1:
-                if suggested_action[0] == 0:
-                    if current_actions[0][1] == suggested_action[0][3] and current_actions[0][0] == suggested_action[0][2]:
-                        r[0] += transfer_reward
-                if suggested_action[1] == 0:
-                    if current_actions[0][1] == suggested_action[1][3] and current_actions[0][0] == suggested_action[1][2]:
-                        r[0] += transfer_reward
-
-        return r, transfer_reward
+        return new_rewards, new_transfer, act_transfer
 
 
 # test trading
@@ -180,8 +167,12 @@ def main():
             episode_rewards = np.zeros(params.nb_agents)
             accumulated_transfer = np.zeros(params.nb_agents)
 
-            suggested_steps = []
-            transfer = 0
+            suggested_steps = [[],[]]
+            new_trade = []
+            transfer = []
+            for i in range(params.nb_agents):
+                new_trade.append(False)
+                transfer.append(0)
             if trade is not None:
                 q_vals_a1 = trade.agents[0].compute_q_values(observations[0])
                 q_vals_a2 = trade.agents[1].compute_q_values(observations[1])
@@ -191,9 +182,6 @@ def main():
             q_vals = [q_vals_a1, q_vals_a2]
 
             info_values = [{'a{}-reward'.format(i): 0.0,
-                            'a{}-episode_debts'.format(i): 0.0,
-                            'trading': 0,
-                            'a{}-greedy'.format(i): 0,
                             'a{}-q_max'.format(i): np.max(q_vals[i]),
                             'a{}-done'.format(i): env.agents[i].done
                             } for i in range(params.nb_agents)]
@@ -211,40 +199,28 @@ def main():
                     else:
                         actions.append(0)
 
-                trading = False
-
-                if trade is not None:
-
-                    observations, r, done, info, transfer, trading = trade.trade_n_steps(env, observations, actions)
-
-                    # list with agents and their suggested actions
-                    suggested_steps = env.check_suggested_steps(trading_steps=params.trading_steps)
+                if trade is not None and not any([agent.done for agent in env.agents]):
+                    observations, r, done, info, suggested_steps, new_trade, transfer, act_transfer = trade.update_trading(env, actions, suggested_steps, new_trade, transfer)
+                    accumulated_transfer += act_transfer
                 else:
                     observations, r, done, info = env.step(actions)
 
                 observations = deepcopy(observations)
-
-                if trade is not None and not any([agent.done for agent in env.agents]):
-                    r, act_transfer = trade.exchange_reward(env, r, suggested_steps, transfer)
-                    accumulated_transfer += act_transfer
                 episode_rewards += r
 
-                if not trading:
-                    if trade is not None:
-                        q_vals_a1 = trade.agents[0].compute_q_values(observations[0])
-                        q_vals_a2 = trade.agents[1].compute_q_values(observations[1])
-                    else:
-                        q_vals_a1 = agents[0].compute_q_values(observations[0])
-                        q_vals_a2 = agents[1].compute_q_values(observations[1])
-                    q_vals = [q_vals_a1, q_vals_a2]
-                    for i, agent in enumerate(env.agents):
-                        info_values[i]['a{}-reward'.format(i)] = r[i]
-                        info_values[i]['trading'] = trading
-                        info_values[i]['a{}-greedy'.format(i)] = 0
-                        info_values[i]['a{}-q_max'.format(i)] = np.max(q_vals[i])
-                        info_values[i]['a{}-done'.format(i)] = env.agents[i].done
+                if trade is not None:
+                    q_vals_a1 = trade.agents[0].compute_q_values(observations[0])
+                    q_vals_a2 = trade.agents[1].compute_q_values(observations[1])
+                else:
+                    q_vals_a1 = agents[0].compute_q_values(observations[0])
+                    q_vals_a2 = agents[1].compute_q_values(observations[1])
+                q_vals = [q_vals_a1, q_vals_a2]
+                for i, agent in enumerate(env.agents):
+                    info_values[i]['a{}-reward'.format(i)] = r[i]
+                    info_values[i]['a{}-q_max'.format(i)] = np.max(q_vals[i])
+                    info_values[i]['a{}-done'.format(i)] = env.agents[i].done
 
-                    combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values,
+                combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values,
                                                                           observations)
 
                 if done:

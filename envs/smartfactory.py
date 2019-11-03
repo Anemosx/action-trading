@@ -425,8 +425,8 @@ class Smartfactory(gym.Env):
             agent = self.agents[i]
             if not agent.done:
                 self.set_position(agent, actions[agent.index])
+                self.set_log(i, actions[agent.index])
                 if self.trading != 0 and self.trading_steps > 0:
-                    self.set_log(i, actions[agent.index])
                     self.change_trade_colors(i, actions[agent.index])
 
                 if self.priorities[i]:
@@ -526,14 +526,13 @@ class Smartfactory(gym.Env):
     def set_log(self, agent_index, action):
         taken_action = [agent_index, action]
         self.actions_log.append(taken_action)
-        print(self.actions_log)
 
-    def check_suggested_steps(self, trading_steps):
-        step_actions = []
-        for i in range(self.nb_agents * trading_steps + self.nb_agents):
-            if len(self.actions_log) >= (self.nb_agents * trading_steps + self.nb_agents):
-                step_actions.append(self.actions_log.pop())
-        return step_actions
+    def get_current_actions(self):
+        current_actions = []
+        for i_actions in range(self.nb_agents):
+            current_actions.append(self.actions_log.pop(0))
+        #print(current_actions)
+        return current_actions
 
     def change_trade_colors(self, agent_index, action):
 
