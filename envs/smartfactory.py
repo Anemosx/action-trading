@@ -184,9 +184,7 @@ class Smartfactory(gym.Env):
             'contracting': (0.13, 0.15, 0.14, 1.0),
             'white': (1.0, 1.0, 1.0, 1.0),
             'dark': (0.13, 0.15, 0.14, 1.0),
-            'debt_balance': (0.6078431372549019, 0.34901960784313724, 0.7137254901960784),
-            'trade-0': (1.0, 1.0, 1.0),
-            'trade-1': (1.0, 1.0, 1.0),
+            'debt_balance': (0.6078431372549019, 0.34901960784313724, 0.7137254901960784)
         }
 
         with open(os.path.join(os.getcwd(), 'envs/actions.json'), 'r') as f:
@@ -204,12 +202,17 @@ class Smartfactory(gym.Env):
         self.trading = trading
         self.trading_steps = trading_steps
         self.trading_actions = trading_actions
-        if trading == 0:
+        self.trade_positions = []
+
+        if self.trading_actions is not None:
             self.actions = trading_actions
-            #self.actions = actions_json['no_trading_action']
-        if trading == 1:
-            if trading_actions is not None:
-                self.actions = trading_actions
+        else:
+            self.actions = actions_json['no_trading_action']
+
+        if self.trading == 1:
+            for i_trading_steps in range(self.trading_steps):
+                self.colors['trade-{}'.format(i_trading_steps * 2)] = (1.0, 1.0, 1.0)
+                self.colors['trade-{}'.format(i_trading_steps * 2 + 1)] = (1.0, 1.0, 1.0)
 
         self.actions_log = []
 
@@ -303,8 +306,10 @@ class Smartfactory(gym.Env):
         self.task_positions = [(-self.field_width/2 + (1 + (i * 2)),
                                 -self.field_height/2 + -1) for i in range(self.nb_tasks)]
 
-        self.trade_positions = [(-self.field_width / 2 + 7,
-                                 -self.field_height / 2 + 5 - (i * 2)) for i in range(self.trading_steps * 2)]
+        if self.trading != 0 and self.trading_steps > 0:
+            for i_steps in range(self.trading_steps):
+                self.trade_positions.append((-self.field_width / 2 + 7 + (i_steps * 2), -self.field_height / 2 + 5))
+                self.trade_positions.append((-self.field_width / 2 + 7 + (i_steps * 2), -self.field_height / 2 + 3))
 
         self.debt_balance_position = [(-self.field_width/2 + 3, self.field_height/2 + 2)]
 
@@ -366,13 +371,14 @@ class Smartfactory(gym.Env):
                                             drawing_layer=0,
                                             color=(1.0, 1.0, 1.0, 0.0))
 
-        for i, trade_pos in enumerate(self.trade_positions):
-            drawing_util.add_polygon_at_pos(self.display_objects,
-                                            position=(trade_pos[0], trade_pos[1]),
-                                            vertices=self.agents[0].agent_vertices,
-                                            name='trade-{}'.format(i),
-                                            drawing_layer=0,
-                                            color=self.colors['trade-{}'.format(i)])
+        if self.trading != 0 and self.trading_steps > 0:
+            for i, trade_pos in enumerate(self.trade_positions):
+                drawing_util.add_polygon_at_pos(self.display_objects,
+                                                position=(trade_pos[0], trade_pos[1]),
+                                                vertices=self.agents[0].agent_vertices,
+                                                name='trade-{}'.format(i),
+                                                drawing_layer=0,
+                                                color=self.colors['trade-{}'.format(i)])
 
         # command for changing color
         #self.display_objects['trade-0'][1].color = self.colors['trade-0']
@@ -419,7 +425,7 @@ class Smartfactory(gym.Env):
             agent = self.agents[i]
             if not agent.done:
                 self.set_position(agent, actions[agent.index])
-                if self.trading != 0 and self.trading_steps != 0:
+                if self.trading != 0 and self.trading_steps > 0:
                     self.set_log(i, actions[agent.index])
                     self.change_trade_colors(i, actions[agent.index])
 
@@ -436,7 +442,7 @@ class Smartfactory(gym.Env):
 
                 if agent.tasks_finished():
                     agent.done = True
-                    if self.trading != 0 and self.trading_steps != 0:
+                    if self.trading != 0 and self.trading_steps > 0:
                         self.change_trade_colors(i, [0.0, 0.0, 5.0, 0.0])
                     # if self.priorities[i] and not self.agents[(i + 1) % 2].done:
                     #    rewards[i] += self.rewards[1]
