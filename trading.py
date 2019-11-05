@@ -42,6 +42,16 @@ class Trade:
         self.mark_up = mark_up
 
     # trading part of step
+    #   set flag to adding suggestion actions
+    #   step
+    #   load current action
+    #   if current action == suggestion action
+    #       del suggestion action
+    #       if suggestion actions == None
+    #           pay reward
+    #   else
+    #       del suggestion actions
+    #   set new suggestion actions depending on flags
 
     def update_trading(self, env, actions, suggested_steps, new_trade, transfer):
         for i_agents in range(self.agent_count):
@@ -79,9 +89,9 @@ class Trade:
                         suggested_steps[i_agents].append(current_actions[copy_action_from][1][i_trading_steps])
 
                     if copy_action_from == 0:
-                        q_val = self.agent_1.compute_q_values(observations[0])
-                    else:
                         q_val = self.agent_2.compute_q_values(observations[1])
+                    else:
+                        q_val = self.agent_1.compute_q_values(observations[0])
                     transfer[i_agents] = np.max(q_val)
                     new_trade[i_agents] = False
 
