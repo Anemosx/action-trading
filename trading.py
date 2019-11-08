@@ -53,18 +53,16 @@ class Trade:
     #       del suggestion actions
     #   set new suggestion actions depending on flags
 
-    def update_trading(self, env, actions, suggested_steps, new_trade, transfer):
+    def update_trading(self, r, env, observations, suggested_steps, transfer):
+        new_trade = [False, False]
         for i_agents in range(self.agent_count):
             if len(suggested_steps[i_agents]) == 0:
                 new_trade[i_agents] = True
             else:
                 new_trade[i_agents] = False
 
-        observations, r, done, info = env.step(actions)
-        observations = deepcopy(observations)
-
         act_transfer = np.zeros(self.agent_count)
-        current_actions = deepcopy(env.get_current_actions().copy())
+        current_actions = deepcopy(env.get_current_actions())
 
         for i_agents in range(self.agent_count):
             agent_of_action = current_actions[i_agents][0]
@@ -97,7 +95,7 @@ class Trade:
                         q_val = self.agent_1.compute_q_values(observations[0])
                     transfer[i_trades] = np.max(q_val)
                     new_trade[i_trades] = False
-        return observations, r, done, info, suggested_steps, new_trade, transfer, act_transfer
+        return r, suggested_steps, transfer, act_transfer
 
     def pay_reward(self, payer, receiver, rewards, transfer_value):
         new_rewards = [0, 0]
@@ -115,6 +113,15 @@ class Trade:
         new_transfer[receiver] = 0
 
         return new_rewards, new_transfer, act_transfer
+
+    def check_actions(self, suggested_steps):
+        action_possibility = [False, False]
+        if self.n_trade_steps == 0:
+            return action_possibility
+        for i_agent in range(self.agent_count):
+            if not suggested_steps[(i_agent + 1) % 2]:
+                action_possibility[i_agent] = True
+        return action_possibility
 
 
 # test trading
@@ -170,7 +177,7 @@ def main():
 
         agents = []
         for i_agent in range(params.nb_agents):
-            agent = build_agent(params=params, nb_actions=env.nb_actions, processor=processor)
+            agent = build_agent(params=params, nb_actions=4, processor=processor)
             agents.append(agent)
             #agents[i_agent].load_weights('experiments/20190923-10-58-52/run-0/contracting-{}/dqn_weights-agent-{}.h5f'.format(0, i_agent))
             # 'experiments/20191017-15-11-23/step-penalty-0.001/run-0.001/contracting-{}/dqn_weights-agent-{}.h5f'.format( 0, i_agent))
@@ -182,10 +189,8 @@ def main():
             accumulated_transfer = np.zeros(params.nb_agents)
 
             suggested_steps = [[],[]]
-            new_trade = []
             transfer = []
             for i in range(params.nb_agents):
-                new_trade.append(False)
                 transfer.append(0)
             if trade is not None:
                 q_vals_a1 = trade.agents[0].compute_q_values(observations[0])
@@ -207,17 +212,23 @@ def main():
                 for i_ag in range(params.nb_agents):
                     if not env.agents[i_ag].done:
                         if not policy_random:
-                            actions.append(agents[i_ag].forward(observations[i_ag]))
+                            if trade.check_actions(suggested_steps)[i_ag]:
+                                actions.append(trade.agents[i_ag].forward(observations[i_ag]))
+                            else:
+                                actions.append(agents[i_ag].forward(observations[i_ag]))
                         else:
                             actions.append(np.random.randint(0, env.nb_actions))
                     else:
                         actions.append(0)
 
+                observations, r, done, info = env.step(actions)
+                observations = deepcopy(observations)
+
                 if trade is not None and not any([agent.done for agent in env.agents]) and params.trading_steps > 0:
-                    observations, r, done, info, suggested_steps, new_trade, transfer, act_transfer = trade.update_trading(env, actions, suggested_steps, new_trade, transfer)
+                    r, suggested_steps, transfer, act_transfer = trade.update_trading(r, env, observations, suggested_steps, transfer)
                     accumulated_transfer += act_transfer
-                else:
-                    observations, r, done, info = env.step(actions)
+                # else:
+                #     observations, r, done, info = env.step(actions)
 
                 observations = deepcopy(observations)
                 episode_rewards += r
