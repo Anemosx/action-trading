@@ -21,6 +21,6 @@
   "contracting_target_update": 0,
   "nb_contracting_steps": 10,
   "trading" : 1,
-  "trading_steps" : 0,
+  "trading_steps" : 1,
   "mark_up": 1.0
 }
