@@ -15,9 +15,9 @@ import common_utils.drawing_util as drawing_util
 
 def build_agent(params, nb_actions, processor):
     # input_shape = (84, 84, 3)
-    input_shape = params.input_shape
+    # input_shape = params.input_shape
     model = Sequential()
-    model.add(Convolution2D(32, (8, 8), strides=(4, 4), input_shape=input_shape))
+    model.add(Convolution2D(32, (8, 8), strides=(4, 4), input_shape=params.input_shape))
     model.add(Activation('relu'))
     model.add(Convolution2D(64, (4, 4), strides=(2, 2)))
     model.add(Activation('relu'))
@@ -29,6 +29,8 @@ def build_agent(params, nb_actions, processor):
     model.add(Dense(nb_actions))
     model.add(Activation('linear'))
     print(model.summary())
+
+    # TODO: xavier, gloro
 
     memory = SequentialMemory(limit=params.memory_limit, window_length=1)
 
@@ -377,20 +379,14 @@ def fit_n_agents_n_step_contracting(env,
                 else:
                     actions.append(np.random.randint(0, 4))
 
-            if contract is not None:
-                observations, r, done, info, contracting = contract.contracting_n_steps(env, observations, actions)
-            else:
-                observations, r, done, info = env.step(actions)
-
+            observations, r, done, info = contract.contracting_n_steps(env, observations, actions)
             observations = deepcopy(observations)
+            #r, transfer = contract.get_compensated_rewards(env=env, rewards=r)
+            #accumulated_transfer += transfer
 
-            if contract is not None and not any([agent.done for agent in env.agents]):
-                r, transfer = contract.get_compensated_rewards(env=env, rewards=r)
-                accumulated_transfer += transfer
-
-            for i, agent in enumerate(agents):
-                if agent.processor is not None:
-                    observations[i], r[i], done, info = agent.processor.process_step(observations[i], r[i], done, info)
+            #for i, agent in enumerate(agents):
+            #    if agent.processor is not None:
+            #        observations[i], r[i], done, info = agent.processor.process_step(observations[i], r[i], done, info)
 
             if nb_max_episode_steps and episode_steps >= nb_max_episode_steps - 1:
                 # Force a terminal state.
@@ -398,13 +394,13 @@ def fit_n_agents_n_step_contracting(env,
                 for agent in env.agents:
                     agent.done = True
 
-
             for i, agent in enumerate(agents):
 
+                agent.step += 1
+                episode_rewards[i] += r[i]
+
                 if not agents_done[i]:
-                    metrics = agent.backward(r[i], terminal=done)
-                    episode_rewards[i] += r[i]
-                    agent.step += 1
+                    metrics = agent.backward(r[i], terminal=env.agents[i].done)
 
                 if env.agents[i].done and not agents_done[i]:
                     agent.forward(observations[i])
@@ -435,8 +431,6 @@ def fit_n_agents_n_step_contracting(env,
                     logger.log_metric('episode_return_agent-{}'.format(i_ag), episode_rewards[i_ag])
                     logger.log_metric('accumulated_transfer_a-{}'.format(i_ag), accumulated_transfer[i_ag])
                     logger.log_metric('episode-compensations-{}'.format(i_ag).format(i_ag), env.agents[i_ag].episode_debts)
-
-
 
                     ag_stats = [episode_rewards[i_ag], accumulated_transfer[i_ag]]
                     ep_stats += ag_stats

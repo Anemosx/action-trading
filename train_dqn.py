@@ -11,10 +11,9 @@ import neptune
 import argparse
 
 
-def train(setting, step_penalty):
+def train(setting):
 
     assert setting in [0, 2]
-    assert step_penalty in [0, 1, 2]
 
     with open('params.json', 'r') as f:
         params_json = json.load(f)
@@ -22,9 +21,7 @@ def train(setting, step_penalty):
     params.contracting = setting
 
     exp_time = datetime.now().strftime('%Y%m%d-%H-%M-%S')
-    step_penalties = [[0.4, 0.04]][step_penalty]
-
-    log_dir = os.path.join(os.getcwd(), 'experiments', '{}'.format(exp_time), 'step-penalty-{}'.format(step_penalties[1]))
+    log_dir = os.path.join(os.getcwd(), 'experiments', '{}'.format(exp_time))
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
@@ -32,13 +29,12 @@ def train(setting, step_penalty):
                  api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzNTQ1ZWQwYy0zNzZiLTRmMmMtYmY0Ny0zN2MxYWQ2NDcyYzEifQ==')
 
 
-
     with neptune.create_experiment(name='contracting-agents',
                                    params=params_json):
 
-        neptune.append_tag('{}-contracting-{}-step_penalty-{}'.format(exp_time, setting, step_penalties[1]))
+        neptune.append_tag('{}-contracting-{}-priorities-fixed'.format(exp_time, setting))
 
-        run_dir = os.path.join(log_dir, 'run-{}'.format(step_penalties[1]), 'contracting-{}'.format(setting))
+        run_dir = os.path.join(log_dir, 'run-{}'.format(0), 'contracting-{}'.format(setting))
         if not os.path.exists(run_dir):
             os.makedirs(run_dir)
 
@@ -52,7 +48,8 @@ def train(setting, step_penalty):
                            field_width=params.field_width,
                            field_height=params.field_height,
                            rewards=params.rewards,
-                           step_penalties=step_penalties,
+                           step_penalties=params.step_penalties,
+                           priorities=params.priorities,
                            contracting=setting,
                            nb_machine_types=params.nb_machine_types,
                            nb_tasks=params.nb_tasks
@@ -60,7 +57,6 @@ def train(setting, step_penalty):
 
         processor = env.SmartfactoryProcessor()
         params.nb_actions = env.nb_actions
-        params.step_penalties = step_penalties
         save_params(params, run_dir)
 
         agents = []
@@ -70,25 +66,28 @@ def train(setting, step_penalty):
         # agents[0].load_weights('experiments/20190923-10-58-52/run-0/contracting-2/dqn_weights-agent-0.h5f')
         # agents[1].load_weights('experiments/20190923-10-58-52/run-0/contracting-2/dqn_weights-agent-1.h5f')
 
-        contract = None
-        if setting > 0:
-            contracting_agents = []
-            for i in range(params.nb_agents):
-                agent = build_agent(params=params, nb_actions=params.nb_actions_no_contracting_action,
-                                    processor=processor)
-                agent.load_weights('experiments/20191018-16-44-34/step-penalty-0.04/run-0.04/contracting-0/dqn_weights-agent-{}.h5f'.format(0))
-                contracting_agents.append(agent)
+        policy_net = build_agent(params=params, nb_actions=4, processor=processor)
+        policy_net.load_weights('experiments/20191105-20-36-43/run-0/contracting-0/dqn_weights-agent-0.h5f')
 
-            contract = Contract(agent_1=contracting_agents[0],
-                                agent_2=contracting_agents[1],
-                                contracting_target_update=params.contracting_target_update,
-                                nb_contracting_steps=params.nb_contracting_steps,
-                                mark_up=params.mark_up)
+        valuation_net_low_prio = build_agent(params=params, nb_actions=4, processor=processor)
+        valuation_net_low_prio.load_weights('experiments/20191106-11-32-13/run-0/contracting-0/dqn_weights-agent-0.h5f')
+
+        valuation_net_high_prio = build_agent(params=params, nb_actions=4, processor=processor)
+        valuation_net_high_prio.load_weights('experiments/20191106-11-30-59/run-0/contracting-0/dqn_weights-agent-0.h5f')
+
+        valuation_nets = [valuation_net_low_prio, valuation_net_high_prio]
+
+        contract = Contract(policy_net=policy_net,
+                            valuation_nets=valuation_nets,
+                            contracting_target_update=params.contracting_target_update,
+                            nb_contracting_steps=params.nb_contracting_steps,
+                            mark_up=params.mark_up,
+                            render=False)
 
         fit_n_agents_n_step_contracting(env,
                                         agents=agents,
                                         nb_steps=params.nb_steps,
-                                        nb_max_episode_steps=120,
+                                        nb_max_episode_steps=500,
                                         logger=neptune,
                                         log_dir=run_dir,
                                         contract=contract)
@@ -100,6 +99,5 @@ def train(setting, step_penalty):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("setting", help="Choose the setting, i.e., 0-number_settings", metavar="SETTING", type=int)
-    parser.add_argument("step_penalty", help="Choose the step_penalty", metavar="STEP_PENALTY", type=int)
     args = parser.parse_args()
-    train(args.setting, args.step_penalty)
+    train(args.setting)

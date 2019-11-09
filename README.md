@@ -12,5 +12,10 @@ Whereas agents in cooperative environments share the same reward function in sel
  - Add A2C Baseline
  - n > 2?
  
+ 
+ 
+ 
+ - DDQN, Duelling Network
+ 
 
  

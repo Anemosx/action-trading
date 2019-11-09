@@ -228,6 +228,37 @@ def render_visual_state(state, info_values, pixels_per_worldunit, bg_color=(0.3,
                                                       12 + (j + 1.0) * vertical_spacing), angle=0, h_align='left')
                 j += 1
                 text.draw(surface)
+            if isinstance(value, (np.ndarray)):
+
+                index_max = np.argmax(value)
+                fills = [(1, 1, 1) for _ in value]
+                fills[index_max] = (0, 1, 0)
+
+                for q, v in enumerate(value):
+
+                    if q == 4 or q == 8:
+                        if q == 4:
+                            t = 'accept'
+                        else:
+                            t = 'offer'
+                        line = gizeh.polyline(points=[(10 + (k*horizontal_spacing), 12 + (j + 1.0) * vertical_spacing),
+                                           (100 + (k*horizontal_spacing), 12 + (j + 1.0) * vertical_spacing)], stroke_width=1,
+                                              stroke=(1, 1, 1), fill=(1, 1, 1))
+                        line.draw(surface)
+                        j += 1
+
+                        text = gizeh.text('{}'.format(t), fontfamily="Helvetica", fontsize=12,
+                                          fill=fills[q], xy=(10 + (k * horizontal_spacing),
+                                                             12 + (j + 1.0) * vertical_spacing), angle=0,
+                                          h_align='left')
+                        j += 1
+                        text.draw(surface)
+
+                    text = gizeh.text('q-{0}: {1:.4}'.format(q+1, v), fontfamily="Helvetica", fontsize=12,
+                                      fill=fills[q], xy=(10 + (k*horizontal_spacing),
+                                                          12 + (j + 1.0) * vertical_spacing), angle=0, h_align='left')
+                    j += 1
+                    text.draw(surface)
             keys.append(key)
     img = surface.get_npimage()
     return img
@@ -256,7 +287,11 @@ def render_all_agents(env, info_values, dist_frames=None, observations=None):
     return frame_combined
 
 
-def render_combined_frames(combined_frames, env, info_values, observations=False):
+def render_combined_frames(combined_frames, env, rewards, contracting, actions, qvals=None):
+
+    info_values = get_info_values()
+    info_values = set_info_values(info_values, env, rewards, contracting, actions, qvals=qvals)
+
     frames = []
     for i_ag in range(env.nb_agents):
         frames.append(env.render(mode='rgb_array', info_values=info_values[i_ag], agent_id=i_ag, video=True))
@@ -266,12 +301,6 @@ def render_combined_frames(combined_frames, env, info_values, observations=False
 
     if env.nb_agents == 2:
         combined_frames.append(np.append(frames[0], frames[1], axis=0))
-
-
-    if observations:
-        for i_ag in range(env.nb_agents):
-            scipy.misc.toimage(observations[i_ag], cmin=0.0, cmax=...).save(
-                'envs/observations/new-outfile-{}-ag-{}.jpg'.format(0, i_ag))
 
     return combined_frames
 
@@ -310,3 +339,30 @@ def render_observations(camera, pixels_per_worldunit, observations, bg_color=(0.
         img[xs[i][0]:xs[i][1], xs[i][2]:xs[i][3]] = obs
 
     return img
+
+
+def get_info_values():
+    return [{'a{}-reward'.format(i): 0.0,
+             'a{}-episode_debts'.format(i): 0.0,
+             'contracting': 0,
+             #'a{}-offer'.format(i): False,
+             #'a{}-accept'.format(i): False,
+             'a{}-done'.format(i): False,
+             'a{}-qvals'.format(i): []
+             } for i in range(2)]
+
+
+def set_info_values(info_values, env, rewards, contracting, actions, qvals):
+
+    for i, agent in enumerate(env.agents):
+        info_values[i]['a{}-reward'.format(i)] = rewards[i]
+        info_values[i]['a{}-episode_debts'.format(i)] = env.agents[i].episode_debts
+        info_values[i]['contracting'] = contracting
+        #info_values[i]['a{}-accept'.format(i)] = int(4 <= actions[i] <= 7)
+        #info_values[i]['a{}-offer'.format(i)] = int(8 <= actions[i] <= 11)
+        if qvals is not None:
+            info_values[i]['a{}-qvals'.format(i)] = qvals[i]
+        info_values[i]['a{}-done'.format(i)] = env.agents[i].done
+
+    return info_values
+

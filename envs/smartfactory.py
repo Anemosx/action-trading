@@ -16,9 +16,11 @@ from copy import deepcopy
 import itertools as it
 import json
 import os
+import scipy
 
 
-INPUT_SHAPE = (84, 84)
+
+INPUT_SHAPE = (84, 84, 1)
 joint_learning = 'JOINT_LEARNING'
 decentral_learning = 'DECENTRAL_LEARNING'
 
@@ -61,6 +63,26 @@ class Agent:
                 index_task = self.task.index(machine.typ)
                 self.task[index_task] = -1
                 task_index = index_task
+
+        return task_index
+
+    def process_task_sequential(self):
+        x = self.body.transform.position.x
+        y = self.body.transform.position.y
+
+        task_index = -1
+
+        if [x, y] in self.env.goal_positions:
+
+            index_machine = self.env.goal_positions.index([x, y])
+            machine = self.env.goals[index_machine]
+
+            if machine.typ == self.task[0] and machine.inactive <= 0:
+                # index_task = self.task.index(machine.typ)
+                machine.inactive = 10
+                del self.task[0]
+                task_index = 0
+
         return task_index
 
     def tasks_finished(self):
@@ -105,10 +127,6 @@ class GridCell:
             self.color = env.colors['machine-0']
         elif self.typ == 1:
             self.color = env.colors['machine-1']
-        elif self.typ == 'trade-0':
-            self.color = env.colors['trade-0']
-        elif self.typ == 'trade-1':
-            self.color = env.colors['trade-1']
         else:
             self.color = env.colors['field']
 
@@ -129,19 +147,19 @@ class Smartfactory(gym.Env):
         def process_observation(self, observation):
             assert observation.ndim == 3  # (height, width, channel)
             img = Image.fromarray(observation)
-            img = img.resize(INPUT_SHAPE)  # .convert('L')  # resize and convert to grayscale
-            processed_observation = np.array(img)
-            # assert processed_observation.shape == INPUT_SHAPE
+            img = img.resize((INPUT_SHAPE[0], INPUT_SHAPE[1])).convert('L')  # resize and convert to grayscale
+            processed_observation = np.array(img).reshape(*INPUT_SHAPE)
+
+            assert processed_observation.shape == INPUT_SHAPE
+
             return processed_observation.astype('uint8')  # saves storage in experience memory
 
         def process_state_batch(self, batch):
             # We could perform this processing step in `process_observation`. In this case, however,
             # we would need to store a `float32` array instead, which is 4x more memory intensive than
             # an `uint8` array. This matters if we store 1M observations.
-
             processed_batch = batch.astype('float32') / 255.
-            # processed_batch = processed_batch.reshape(len(batch), 84, 84, 3)
-            processed_batch = processed_batch.reshape(len(batch), 84, 84, 3)
+            processed_batch = processed_batch.reshape(len(batch), *INPUT_SHAPE)
             return processed_batch
 
         def process_reward(self, reward):
@@ -153,6 +171,7 @@ class Smartfactory(gym.Env):
                  field_height,
                  rewards,
                  step_penalties,
+                 priorities,
                  learning=decentral_learning,
                  trading=0,
                  trading_steps=0,
@@ -174,47 +193,42 @@ class Smartfactory(gym.Env):
 
         self.colors = {
             'agent-0': (0.20392156862745098, 0.596078431372549, 0.8588235294117647),
-            'agent-1': (0.5843137254901961, 0.6470588235294118, 0.6509803921568628, 1.0),
+            'agent-1': (0.13, 0.15, 0.14, 1.0), #(0.5843137254901961, 0.6470588235294118, 0.6509803921568628, 1.0), # (1.0, 0.85098039215686272, 0.18431372549019609), #
             'outer_field': (0.5843137254901961, 0.6470588235294118, 0.6509803921568628),
             'field': (1.0, 1.0, 1.0, 1.0),
             'wall': (0.5843137254901961, 0.6470588235294118, 0.6509803921568628, 0.4),
             'checkpoint': (0.13, 0.15, 0.14, 1.0),
-            'machine-0': (0.1803921568627451, 0.8, 0.44313725490196076),  # (0.6078431372549019, 0.34901960784313724, 0.7137254901960784),
-            'machine-1': (0.9058823529411765, 0.2980392156862745, 0.23529411764705882),
+            'machine-0': (.7, .7, .7, 1.0),  # (0.1803921568627451, 0.8, 0.44313725490196076),  # (0.6078431372549019, 0.34901960784313724, 0.7137254901960784),
+            'machine-1': (0.58, 0.64, 0.65, 1.0), # (0.13, 0.15, 0.14, 1.0), # (0.9058823529411765, 0.2980392156862745, 0.23529411764705882),
             'contracting': (0.13, 0.15, 0.14, 1.0),
             'white': (1.0, 1.0, 1.0, 1.0),
             'dark': (0.13, 0.15, 0.14, 1.0),
             'debt_balance': (0.6078431372549019, 0.34901960784313724, 0.7137254901960784)
         }
 
-        with open(os.path.join(os.getcwd(), 'envs/actions.json'), 'r') as f:
+        with open(os.path.join(os.getcwd(), 'actions.json'), 'r') as f:
             actions_json = json.load(f)
 
         self.actions = []
         self.contracting = contracting
-        # if contracting == 0:
-        #     self.actions = actions_json['no_contracting_action']
-        # if contracting == 1:
-        #     self.actions = actions_json['one_contracting_action']
-        # if contracting == 2:
-        #     self.actions = actions_json['two_contracting_actions']
+        if contracting == 0:
+            self.actions = actions_json['no_contracting_action']
+        if contracting == 1:
+            self.actions = actions_json['one_contracting_action']
+        if contracting == 2:
+            self.actions = actions_json['two_contracting_actions']
 
         self.trading = trading
         self.trading_steps = trading_steps
         self.trading_actions = trading_actions
-        self.trade_positions = []
 
         if self.trading_actions is not None:
             self.actions = trading_actions
         else:
             self.actions = actions_json['no_trading_action']
 
-        if self.trading == 1:
-            for i_trading_steps in range(self.trading_steps):
-                self.colors['trade-{}'.format(i_trading_steps * 2)] = (1.0, 1.0, 1.0)
-                self.colors['trade-{}'.format(i_trading_steps * 2 + 1)] = (1.0, 1.0, 1.0)
-
         self.actions_log = []
+        self.trade_positions = []
 
         self.learning = learning
         self.nb_actions = len(self.actions)
@@ -258,6 +272,8 @@ class Smartfactory(gym.Env):
         self.priorities = []
         self.debt_balances = []
         self.balance = np.zeros(self.nb_agents)
+        self.greedy = []
+        self.priorities = priorities
 
     def _create_field(self):
 
@@ -301,17 +317,24 @@ class Smartfactory(gym.Env):
                  list(np.random.randint(0, self.nb_machine_types, self.nb_tasks))]
         machine_types = [0, 1, 0, 1, 0]
 
-        self.priorities = np.random.choice([0,1], 2, replace=False)
+        if np.sum(self.priorities) == 1:
+            self.priorities = np.random.choice([0, 1], 2, replace=False)
 
         self.task_positions = [(-self.field_width/2 + (1 + (i * 2)),
                                 -self.field_height/2 + -1) for i in range(self.nb_tasks)]
 
+        self.debt_balance_position = [(-self.field_width/2 + 3, self.field_height/2 + 2)]
+        self.greedy = []
+
+        if self.trading == 1:
+            for i_trading_steps in range(self.trading_steps):
+                self.colors['trade-{}'.format(i_trading_steps * 2)] = (1.0, 1.0, 1.0, 0.0)
+                self.colors['trade-{}'.format(i_trading_steps * 2 + 1)] = (1.0, 1.0, 1.0, 0.0)
+
         if self.trading != 0 and self.trading_steps > 0:
             for i_steps in range(self.trading_steps):
                 self.trade_positions.append((-self.field_width / 2 + 7 + (i_steps * 2), -self.field_height / 2 + 5))
-                self.trade_positions.append((-self.field_width / 2 + 7 + (i_steps * 2), -self.field_height / 2 + 3))
-
-        self.debt_balance_position = [(-self.field_width/2 + 3, self.field_height/2 + 2)]
+                self.trade_positions.append((-self.field_width / 2 + 7 + (i_steps * 2), -self.field_height / 2 + 5))
 
         for i in range(self.nb_agents):
             agent = Agent(world=self.world,
@@ -380,9 +403,6 @@ class Smartfactory(gym.Env):
                                                 drawing_layer=0,
                                                 color=self.colors['trade-{}'.format(i)])
 
-        # command for changing color
-        #self.display_objects['trade-0'][1].color = self.colors['trade-0']
-
         self._create_field()
 
         return self.observation
@@ -428,16 +448,17 @@ class Smartfactory(gym.Env):
                 self.set_log(i, actions[agent.index])
                 if self.trading != 0 and self.trading_steps > 0:
                     self.change_trade_colors(i, actions[agent.index])
+
                 if self.priorities[i]:
                     rewards[i] -= self.step_penalties[0]
                 else:
                     rewards[i] -= self.step_penalties[1]
 
-                if agent.process_task() >= 0:
+                if agent.process_task_sequential() >= 0:
                     if self.priorities[i]:
-                        rewards[i] += 1.
+                        rewards[i] += self.rewards[0]
                     else:
-                        rewards[i] += 0.4
+                        rewards[i] += self.rewards[1]
 
                 if agent.tasks_finished():
                     agent.done = True
@@ -498,6 +519,9 @@ class Smartfactory(gym.Env):
         greedy = [0, 0]
         contracting = False
 
+        if self.contracting == 0:
+            pass
+
         if self.contracting == 1:
             raise NotImplementedError
 
@@ -510,17 +534,9 @@ class Smartfactory(gym.Env):
                 greedy[0] = 1
 
         assert any(i == 0 for i in greedy)
+        self.greedy = greedy
 
         return contracting, greedy
-
-    def check_trading(self, actions):
-        trading_val = False
-        if self.trading != 0 and self.trading_steps != 0:
-            if self.actions[actions[0]][2] != 0 or self.actions[actions[0]][3] != 0:
-                trading_val = True
-            if self.actions[actions[1]][2] != 0 or self.actions[actions[1]][3] != 0:
-                trading_val = True
-        return trading_val
 
     def set_log(self, agent_index, action):
         taken_action = [agent_index, action]
@@ -535,17 +551,17 @@ class Smartfactory(gym.Env):
     def change_trade_colors(self, agent_index, action):
 
         if action[3] == 1.0:  # up # yellow
-            self.colors['trade-{}'.format(agent_index)] = (1.0, 1.0, 0.0)
+            self.colors['trade-{}'.format(agent_index)] = (1.0, 1.0, 1.0, 0.25)
         if action[3] == -1.0:  # down # green
-            self.colors['trade-{}'.format(agent_index)] = (0.0, 1.0, 0.0)
+            self.colors['trade-{}'.format(agent_index)] = (1.0, 1.0, 1.0, 0.35)
         if action[2] == -1.0:  # left # lightblue
-            self.colors['trade-{}'.format(agent_index)] = (0.0, 1.0, 1.0)
+            self.colors['trade-{}'.format(agent_index)] = (1.0, 1.0, 1.0, 0.45)
         if action[2] == 1.0:  # right # darkblue
-            self.colors['trade-{}'.format(agent_index)] = (0.0, 0.0, 1.0)
+            self.colors['trade-{}'.format(agent_index)] = (1.0, 1.0, 1.0, 0.55)
 
         # remove trade signal
         if action[2] == 5.0:
-            self.colors['trade-{}'.format(agent_index)] = (0.0, 0.0, 0.0, 0.0)
+            self.colors['trade-{}'.format(agent_index)] = (1.0, 1.0, 1.0, 0.0)
 
         self.display_objects['trade-{}'.format(agent_index)][1].color = self.colors['trade-{}'.format(agent_index)]
 
@@ -559,6 +575,11 @@ class Smartfactory(gym.Env):
 
             if agent_id is not None:
 
+                if np.sum([int(agent.done) for agent in self.agents]) > 0:
+                    display_objects['field'][1].color = self.colors['dark']
+                else:
+                    display_objects['field'][1].color = self.colors['white']
+
                 if self.agents[agent_id].done:
                     display_objects['agent-{}'.format(agent_id)][1].color = (1.0, 1.0, 1.0, 0.0)
                 else:
@@ -567,21 +588,30 @@ class Smartfactory(gym.Env):
                 display_objects['agent-{}'.format(agent_id)] = (10, display_objects['agent-{}'.format(agent_id)][1])
 
                 if self.priorities[agent_id]:
-                    display_objects['field'][1].color = self.colors['dark']
+                    display_objects['debt_balance'][1].color = self.colors['white']
                 else:
-                    display_objects['field'][1].color = self.colors['white']
+                    display_objects['debt_balance'][1].color = (1.0, 1.0, 1.0, 0.0)
 
-                for i_task, task in enumerate(self.agents[agent_id].task):
-                    if task >= 0:
-                        display_objects['task-{}'.format(i_task)][1].color = self.colors['machine-{}'.format(task)]
-                    else:
-                        display_objects['task-{}'.format(i_task)][1].color = (1.0, 1.0, 1.0, 0.0)
+                for t in range(self.nb_tasks):
+                    display_objects['task-{}'.format(t)][1].color = (1.0, 1.0, 1.0, 0.0)
 
-                if self.contracting:
-                    if self.agents[agent_id].episode_debts < self.agents[(agent_id + 1) % 2].episode_debts:
-                        display_objects['debt_balance'][1].color = self.colors['debt_balance']
-                    else:
-                        display_objects['debt_balance'][1].color = (1.0, 1.0, 1.0, 0.0)
+                    if len(self.agents[agent_id].task) > t:
+                        task = self.agents[agent_id].task[t]
+
+                        if task >= 0:
+                            display_objects['task-{}'.format(t)][1].color = self.colors['machine-{}'.format(task)]
+                    # else:
+
+                for i_trading_steps in range(self.trading_steps*2):
+                    display_objects['trade-{}'.format(i_trading_steps)][1].color = (1.0, 1.0, 1.0, 0.0)
+
+                    if i_trading_steps % 2 == agent_id:
+                        display_objects['trade-{}'.format(i_trading_steps)][1].color = self.colors['trade-{}'.format(i_trading_steps)]
+
+                if np.sum(self.greedy) > 0:
+                    i = self.greedy.index(0)
+                    if i == agent_id:
+                            display_objects['field'][1].color = self.colors['dark']
 
                 for i_agent, agent in enumerate(self.agents):
                     if i_agent != agent_id:
@@ -606,10 +636,6 @@ class Smartfactory(gym.Env):
         observations = []
         for i_agent, agent in enumerate(self.agents):
             observation = self.render(mode='rgb_array', agent_id=i_agent)
-            img = Image.fromarray(observation)
-            img = img.resize(INPUT_SHAPE)  # .convert('L')  # resize and convert to grayscale
-            processed_observation = np.array(img)
-            observation = processed_observation.astype('uint8')
             observations.append(observation)
 
         return observations
@@ -647,7 +673,8 @@ def main():
                        field_width=field_with,
                        field_height=field_height,
                        rewards=[1, 5],
-                       step_penalties=[0.1, 0.1],
+                       step_penalties=[0.1, 0.01],
+                       priorities=[1, 0],
                        nb_machine_types=nb_machine_types,
                        nb_tasks=nb_tasks)
     episodes = 1
@@ -660,7 +687,7 @@ def main():
         info_values = [{'reward': 0.0,
                         'action': -1} for _ in range(env.nb_agents)]
 
-        combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values, observations)
+        combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values, 0, observations)
 
         for i_step in range(1, episode_steps):
 
@@ -670,11 +697,16 @@ def main():
 
             observations, rewards, done, _ = env.step(actions=actions)
 
+            for i_ag in range(env.nb_agents):
+                scipy.misc.toimage(observations[i_ag], cmin=0.0, cmax=...).save(
+                    'observations/new-outfile-{}-ag-{}.jpg'.format(i_step, i_ag))
+
+
             for i, agent in enumerate(env.agents):
                 info_values[i]['reward'] = rewards[i]
                 info_values[i]['action'] = actions[i]
 
-            combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values, observations)
+            combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values, 0, observations)
 
             if done:
                 break
