@@ -53,16 +53,21 @@ class Trade:
     #       del suggestion actions
     #   set new suggestion actions depending on flags
 
-    def update_trading(self, r, env, observations, suggested_steps, transfer):
+    def update_trading(self, r, env, q_vals, suggested_steps, transfer):
+        act_transfer = np.zeros(self.agent_count)
+        current_actions = deepcopy(env.get_current_actions())
+        rewards = deepcopy(r)
+
+        if self.n_trade_steps == 0:
+            return rewards, suggested_steps, transfer, act_transfer
+
         new_trade = [False, False]
+
         for i_agents in range(self.agent_count):
             if len(suggested_steps[i_agents]) == 0:
                 new_trade[i_agents] = True
             else:
                 new_trade[i_agents] = False
-
-        act_transfer = np.zeros(self.agent_count)
-        current_actions = deepcopy(env.get_current_actions())
 
         for i_agents in range(self.agent_count):
             agent_of_action = current_actions[i_agents][0]
@@ -73,7 +78,7 @@ class Trade:
                     del suggested_steps[agent_of_action][0]
 
                     if len(suggested_steps[agent_of_action]) == 0:
-                        r, transfer, act_agent_transfer = self.pay_reward((agent_of_action + 1) % 2, agent_of_action, r,
+                        rewards, transfer, act_agent_transfer = self.pay_reward((agent_of_action + 1) % 2, agent_of_action, r,
                                                                           transfer)
                         act_transfer[agent_of_action] += act_agent_transfer
                 else:
@@ -90,24 +95,22 @@ class Trade:
                     # suggested_steps[i_trades].append(current_actions[copy_action_from][1][i_trading_steps])
 
                     if copy_action_from == 0:
-                        q_val = self.agent_2.compute_q_values(observations[1])
+                        q_val = q_vals[1]
                     else:
-                        q_val = self.agent_1.compute_q_values(observations[0])
+                        q_val = q_vals[0]
+
                     transfer[i_trades] = np.max(q_val)
                     new_trade[i_trades] = False
-        return r, suggested_steps, transfer, act_transfer
+
+        return rewards, suggested_steps, transfer, act_transfer
 
     def pay_reward(self, payer, receiver, rewards, transfer_value):
-        new_rewards = [0, 0]
+        new_rewards = deepcopy(rewards)
         new_transfer = [0, 0]
-        act_transfer = 0
 
-        if rewards[payer] - transfer_value[receiver] > 0:
-            new_rewards[payer] = rewards[payer] - transfer_value[receiver]
-            new_rewards[receiver] = rewards[receiver] + transfer_value[receiver]
-            act_transfer = transfer_value[receiver]
-        else:
-            new_rewards = rewards
+        new_rewards[payer] -= transfer_value[receiver]
+        new_rewards[receiver] += transfer_value[receiver]
+        act_transfer = transfer_value[receiver]
 
         new_transfer[payer] = transfer_value[payer]
         new_transfer[receiver] = 0
@@ -115,13 +118,13 @@ class Trade:
         return new_rewards, new_transfer, act_transfer
 
     def check_actions(self, suggested_steps):
-        action_possibility = [False, False]
+        tr_action_possibility = [False, False]
         if self.n_trade_steps == 0:
-            return action_possibility
+            return tr_action_possibility
         for i_agent in range(self.agent_count):
             if not suggested_steps[(i_agent + 1) % 2]:
-                action_possibility[i_agent] = True
-        return action_possibility
+                tr_action_possibility[i_agent] = True
+        return tr_action_possibility
 
 
 # test trading
@@ -184,26 +187,25 @@ def main():
             observations = env.reset()
             episode_rewards = np.zeros(params.nb_agents)
             accumulated_transfer = np.zeros(params.nb_agents)
+            transfer = np.zeros(params.nb_agents)
+            q_vals = []
 
             suggested_steps = [[], []]
-            transfer = []
-            for i in range(params.nb_agents):
-                transfer.append(0)
 
             if trade is not None:
-                q_vals_a1 = trade.agents[0].compute_q_values(observations[0])
-                q_vals_a2 = trade.agents[1].compute_q_values(observations[1])
+                for i in range(2):
+                    if trading_agents[i].processor is not None:
+                        observations[i] = trading_agents[i].processor.process_observation(observations[i])
+                q_vals.append(trade.agents[0].compute_q_values(observations[0]))
+                q_vals.append(trade.agents[1].compute_q_values(observations[1]))
             else:
-                q_vals_a1 = agents[0].compute_q_values(observations[0])
-                q_vals_a2 = agents[1].compute_q_values(observations[1])
-            q_vals = [q_vals_a1, q_vals_a2]
+                for i in range(2):
+                    if agents[i].processor is not None:
+                        observations[i] = agents[i].processor.process_observation(observations[i])
+                q_vals.append(agents[0].compute_q_values(observations[0]))
+                q_vals.append(agents[1].compute_q_values(observations[1]))
 
-            info_values = [{'a{}-reward'.format(i): 0.0,
-                            'a{}-q_max'.format(i): np.max(q_vals[i]),
-                            'a{}-done'.format(i): env.agents[i].done
-                            } for i in range(params.nb_agents)]
-
-            combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values, 0, observations)
+            combined_frames = drawing_util.render_combined_frames(combined_frames, env, [0, 0], t, [0, 0])
 
             for i_step in range(episode_steps):
                 actions = []
@@ -222,8 +224,8 @@ def main():
                 observations, r, done, info = env.step(actions)
                 observations = deepcopy(observations)
 
-                if trade is not None and not any([agent.done for agent in env.agents]) and params.trading_steps > 0:
-                    r, suggested_steps, transfer, act_transfer = trade.update_trading(r, env, observations,
+                if trade is not None and not any([agent.done for agent in env.agents]):
+                    r, suggested_steps, transfer, act_transfer = trade.update_trading(r, env, q_vals,
                                                                                       suggested_steps, transfer)
                     accumulated_transfer += act_transfer
                 # else:
@@ -233,19 +235,20 @@ def main():
                 episode_rewards += r
 
                 if trade is not None:
+                    for i in range(2):
+                        if trading_agents[i].processor is not None:
+                            observations[i] = trading_agents[i].processor.process_observation(observations[i])
                     q_vals_a1 = trade.agents[0].compute_q_values(observations[0])
                     q_vals_a2 = trade.agents[1].compute_q_values(observations[1])
                 else:
+                    for i in range(2):
+                        if agents[i].processor is not None:
+                            observations[i] = agents[i].processor.process_observation(observations[i])
                     q_vals_a1 = agents[0].compute_q_values(observations[0])
                     q_vals_a2 = agents[1].compute_q_values(observations[1])
                 q_vals = [q_vals_a1, q_vals_a2]
-                for i, agent in enumerate(env.agents):
-                    info_values[i]['a{}-reward'.format(i)] = r[i]
-                    info_values[i]['a{}-q_max'.format(i)] = np.max(q_vals[i])
-                    info_values[i]['a{}-done'.format(i)] = env.agents[i].done
 
-                combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values, 0,
-                                                                      observations)
+                combined_frames = drawing_util.render_combined_frames(combined_frames, env, r, t, actions, q_vals)
 
                 if done:
                     ep_stats = [i_episode, (trade is not None), np.sum(episode_rewards), 0,
@@ -255,6 +258,9 @@ def main():
                         ep_stats += ag_stats
                     df.loc[i_episode] = ep_stats
                     break
+
+            print("Estimated Rewards for not collecting and trading: \n[-10.  -1.] or [-1.  -10.]")
+            print("Actually Rewards: \n", episode_rewards)
 
         # df.to_csv(os.path.join('test-values-trading-t-{}.csv'.format(0)))
         export_video('Smart-Factory-Trading.mp4', combined_frames, None)

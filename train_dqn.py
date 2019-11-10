@@ -25,8 +25,8 @@ def train(setting):
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
-    neptune.init('kyrillschmid/contracting-agents',
-                 api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzNTQ1ZWQwYy0zNzZiLTRmMmMtYmY0Ny0zN2MxYWQ2NDcyYzEifQ==')
+    neptune.init('arno/trading-agents',
+                 api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzMDc2ZmU2YS1lYWFkLTQwNjUtOTgyMS00OTczMGU4NDYzNzcifQ==')
 
 
     with neptune.create_experiment(name='contracting-agents',
