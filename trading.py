@@ -15,11 +15,11 @@ def setup_action_space(step, trading_steps, tr_action_space):
     if tr_action_space is None:
         tr_action_space = [[0.0, 1.0], [0.0, -1.0], [-1.0, 0.0], [1.0, 0.0]]
     if step == 0:
-        # if trading_steps != 0:
-        #     no_tr_action_space = [[0.0, 1.0], [0.0, -1.0], [-1.0, 0.0], [1.0, 0.0]]
-        #     for i in range(len(no_tr_action_space)):
-        #         no_tr_action_space[i] = no_tr_action_space[i] + [0.0, 0.0] * trading_steps
-        #     tr_action_space = no_tr_action_space + tr_action_space
+        if trading_steps != 0:
+            no_tr_action_space = [[0.0, 1.0], [0.0, -1.0], [-1.0, 0.0], [1.0, 0.0]]
+            for i in range(len(no_tr_action_space)):
+                no_tr_action_space[i] = no_tr_action_space[i] + [0.0, 0.0] * trading_steps
+            tr_action_space = no_tr_action_space + tr_action_space
         return tr_action_space
     if step > 0:
         for i_actions in range(len(tr_action_space)):
@@ -61,14 +61,6 @@ class Trade:
         if self.n_trade_steps == 0:
             return rewards, suggested_steps, transfer, act_transfer
 
-        new_trade = [False, False]
-
-        for i_agents in range(self.agent_count):
-            if len(suggested_steps[i_agents]) == 0:
-                new_trade[i_agents] = True
-            else:
-                new_trade[i_agents] = False
-
         for i_agents in range(self.agent_count):
             agent_of_action = current_actions[i_agents][0]
             if len(suggested_steps[agent_of_action]) != 0:
@@ -84,15 +76,20 @@ class Trade:
                 else:
                     suggested_steps[agent_of_action] = []
 
+        new_trade = [False, False]
+        for i_agents in range(self.agent_count):
+            if len(suggested_steps[i_agents]) == 0:
+                new_trade[i_agents] = True
+            else:
+                new_trade[i_agents] = False
+
         for i_trades in range(len(new_trade)):
             if new_trade[i_trades]:
                 copy_action_from = (i_trades + 1) % 2
                 del current_actions[copy_action_from][1][0]
                 del current_actions[copy_action_from][1][0]
-                if current_actions[copy_action_from][1][0] != [0.0, 0.0]:
+                if current_actions[copy_action_from][1] != [0.0, 0.0]:
                     suggested_steps[i_trades] = deepcopy(current_actions[copy_action_from][1])
-                    # for i_trading_steps in range(len(current_actions[copy_action_from][1])):
-                    # suggested_steps[i_trades].append(current_actions[copy_action_from][1][i_trading_steps])
 
                     if copy_action_from == 0:
                         q_val = q_vals[1]
@@ -172,7 +169,7 @@ def main():
     if t != 0:
         trading_agents = []
         for i in range(params.nb_agents):
-            agent = build_agent(params=params, nb_actions=len(action_space), processor=processor)
+            agent = build_agent(params=params, nb_actions=len(action_space)-4, processor=processor)
             trading_agents.append(agent)
         trade = Trade(agent_1=trading_agents[0], agent_2=trading_agents[1], n_trade_steps=params.trading_steps,
                       mark_up=params.mark_up)
@@ -213,7 +210,7 @@ def main():
                     if not env.agents[i_ag].done:
                         if not policy_random:
                             if trade.check_actions(suggested_steps)[i_ag]:
-                                actions.append(trade.agents[i_ag].forward(observations[i_ag]))
+                                actions.append(trade.agents[i_ag].forward(observations[i_ag])+4)
                             else:
                                 actions.append(agents[i_ag].forward(observations[i_ag]))
                         else:
@@ -223,16 +220,6 @@ def main():
 
                 observations, r, done, info = env.step(actions)
                 observations = deepcopy(observations)
-
-                if trade is not None and not any([agent.done for agent in env.agents]):
-                    r, suggested_steps, transfer, act_transfer = trade.update_trading(r, env, q_vals,
-                                                                                      suggested_steps, transfer)
-                    accumulated_transfer += act_transfer
-                # else:
-                #     observations, r, done, info = env.step(actions)
-
-                observations = deepcopy(observations)
-                episode_rewards += r
 
                 if trade is not None:
                     for i in range(2):
@@ -247,6 +234,17 @@ def main():
                     q_vals_a1 = agents[0].compute_q_values(observations[0])
                     q_vals_a2 = agents[1].compute_q_values(observations[1])
                 q_vals = [q_vals_a1, q_vals_a2]
+
+                if trade is not None and not any([agent.done for agent in env.agents]):
+                    r, suggested_steps, transfer, act_transfer = trade.update_trading(r, env, q_vals,
+                                                                                      suggested_steps, transfer)
+                    accumulated_transfer += act_transfer
+                    env.update_trade_colors(suggested_steps)
+
+                observations = deepcopy(observations)
+                episode_rewards += r
+
+                # todo new q_vals calculation for info
 
                 combined_frames = drawing_util.render_combined_frames(combined_frames, env, r, t, actions, q_vals)
 

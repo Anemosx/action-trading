@@ -220,9 +220,8 @@ class Smartfactory(gym.Env):
 
         self.trading = trading
         self.trading_steps = trading_steps
-        self.trading_actions = trading_actions
 
-        if self.trading_actions is not None:
+        if trading_actions is not None:
             self.actions = trading_actions
         else:
             self.actions = actions_json['no_trading_action']
@@ -326,16 +325,11 @@ class Smartfactory(gym.Env):
         self.debt_balance_position = [(-self.field_width/2 + 3, self.field_height/2 + 2)]
         self.greedy = []
 
-        if self.trading == 1:
-            for i_trading_steps in range(self.trading_steps):
-                self.colors['trade-{}'.format(i_trading_steps * 2)] = (1.0, 1.0, 1.0, 0.0)
-                self.colors['trade-{}'.format(i_trading_steps * 2 + 1)] = (1.0, 1.0, 1.0, 0.0)
-
         self.trade_positions = []
-        if self.trading != 0 and self.trading_steps > 0:
-            for i_steps in range(self.trading_steps):
-                self.trade_positions.append((-self.field_width / 2 + 7 + (i_steps * 2), -self.field_height / 2 + 5))
-                self.trade_positions.append((-self.field_width / 2 + 7 + (i_steps * 2), -self.field_height / 2 + 5))
+        if self.trading != 0 and self.trading_steps != 0:
+            for i_agents in range(self.nb_agents):
+                self.colors['trade-{}'.format(i_agents)] = (1.0, 1.0, 1.0, 0.0)
+                self.trade_positions.append((-self.field_width / 2 + 7, -self.field_height / 2 + 5))
 
         for i in range(self.nb_agents):
             agent = Agent(world=self.world,
@@ -395,7 +389,7 @@ class Smartfactory(gym.Env):
                                             drawing_layer=0,
                                             color=(1.0, 1.0, 1.0, 0.0))
 
-        if self.trading != 0 and self.trading_steps > 0:
+        if self.trading != 0 and self.trading_steps != 0:
             for i, trade_pos in enumerate(self.trade_positions):
                 drawing_util.add_polygon_at_pos(self.display_objects,
                                                 position=(trade_pos[0], trade_pos[1]),
@@ -447,8 +441,6 @@ class Smartfactory(gym.Env):
             if not agent.done:
                 self.set_position(agent, actions[agent.index])
                 self.set_log(i, actions[agent.index])
-                if self.trading != 0 and self.trading_steps > 0:
-                    self.change_trade_colors(i, actions[agent.index])
                 if self.priorities[i]:
                     rewards[i] -= self.step_penalties[0]
                 else:
@@ -462,8 +454,6 @@ class Smartfactory(gym.Env):
 
                 if agent.tasks_finished():
                     agent.done = True
-                    if self.trading != 0 and self.trading_steps > 0:
-                        self.change_trade_colors(i, [0.0, 0.0, 5.0, 0.0])
                     # if self.priorities[i] and not self.agents[(i + 1) % 2].done:
                     #    rewards[i] += self.rewards[1]
 
@@ -548,23 +538,19 @@ class Smartfactory(gym.Env):
             current_actions.append(self.actions_log.pop(0))
         return current_actions
 
-    def change_trade_colors(self, agent_index, action):
-
-        if action[3] == 1.0:  # up # yellow
-            self.colors['trade-{}'.format(agent_index)] = (1.0, 1.0, 1.0, 0.25)
-        if action[3] == -1.0:  # down # green
-            self.colors['trade-{}'.format(agent_index)] = (1.0, 1.0, 1.0, 0.35)
-        if action[2] == -1.0:  # left # lightblue
-            self.colors['trade-{}'.format(agent_index)] = (1.0, 1.0, 1.0, 0.45)
-        if action[2] == 1.0:  # right # darkblue
-            self.colors['trade-{}'.format(agent_index)] = (1.0, 1.0, 1.0, 0.55)
-
-        # remove trade signal
-        if action[2] == 5.0:
-            self.colors['trade-{}'.format(agent_index)] = (1.0, 1.0, 1.0, 0.0)
-            #self.colors['trade-{}'.format((agent_index+1) % 2)] = (1.0, 1.0, 1.0, 0.0)
-
-        self.display_objects['trade-{}'.format(agent_index)][1].color = self.colors['trade-{}'.format(agent_index)]
+    def update_trade_colors(self, suggested_steps):
+        for i in range(len(suggested_steps)):
+            if suggested_steps[i]:
+                if suggested_steps[i][1] == 1.0: # up
+                    self.colors['trade-{}'.format(i)] = (0.2, 0.2, 0.2, 1.0)
+                if suggested_steps[i][1] == -1.0: # down
+                    self.colors['trade-{}'.format(i)] = (0.4, 0.4, 0.4, 1.0)
+                if suggested_steps[i][0] == -1.0: # left
+                    self.colors['trade-{}'.format(i)] = (0.6, 0.6, 0.6, 1.0)
+                if suggested_steps[i][0] == 1.0: # right
+                    self.colors['trade-{}'.format(i)] = (0.8, 0.8, 0.8, 1.0)
+            else:
+                self.colors['trade-{}'.format(i)] = (1.0, 1.0, 1.0, 0.0)
 
     def render(self, mode='human', close=False, info_values=None, agent_id=None, video=False):
         if mode == 'rgb_array':
@@ -603,11 +589,16 @@ class Smartfactory(gym.Env):
                             display_objects['task-{}'.format(t)][1].color = self.colors['machine-{}'.format(task)]
                     # else:
 
-                for i_trading_steps in range(self.trading_steps*2):
-                    display_objects['trade-{}'.format(i_trading_steps)][1].color = (1.0, 1.0, 1.0, 0.0)
-
-                    if (i_trading_steps+1) % 2 == agent_id:
-                        display_objects['trade-{}'.format(i_trading_steps)][1].color = self.colors['trade-{}'.format(i_trading_steps)]
+                if self.trading != 0 and self.trading_steps != 0:
+                    render_trade = True
+                    for i in range(self.nb_agents):
+                        if self.agents[i].done:
+                            render_trade = False
+                    for i_agents in range(self.nb_agents):
+                        display_objects['trade-{}'.format(i_agents)][1].color = (1.0, 1.0, 1.0, 0.0)
+                        if render_trade:
+                            if i_agents % 2 == agent_id:
+                                display_objects['trade-{}'.format(i_agents)][1].color = self.colors['trade-{}'.format(i_agents)]
 
                 if np.sum(self.greedy) > 0:
                     i = self.greedy.index(0)
