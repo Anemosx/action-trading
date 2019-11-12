@@ -438,9 +438,9 @@ class Smartfactory(gym.Env):
         queue = np.random.choice([0, self.nb_agents-1], self.nb_agents, replace=False)
         for i in queue:
             agent = self.agents[i]
+            self.set_log(i, actions[agent.index])
             if not agent.done:
                 self.set_position(agent, actions[agent.index])
-                self.set_log(i, actions[agent.index])
                 if self.priorities[i]:
                     rewards[i] -= self.step_penalties[0]
                 else:
