@@ -486,6 +486,7 @@ def fit_n_agents_n_step_trading(env,
     episode_trades = 0
     agents_done = [False for _ in range(len(agents))]
     suggested_steps = [[], []]
+    q_vals = [[],[]]
     transfer = np.zeros(len(agents))
 
     for agent in agents:
@@ -495,12 +496,13 @@ def fit_n_agents_n_step_trading(env,
         while agents[0].step < nb_steps:
             if observations[0] is None:  # start of a new episode
                 observations = deepcopy(env.reset())
+                q_vals = [[],[]]
+                transfer = np.zeros(len(agents))
+                suggested_steps = [[], []]
                 for i, agent in enumerate(agents):
                     episode_steps = 0
                     episode_rewards[i] = 0
                     episode_trades = 0
-                    suggested_steps = [[], []]
-                    transfer = np.zeros(len(agents))
                     agents_done = [False for _ in range(len(agents))]
                     accumulated_transfer = np.zeros(len(agents))
                     greedy = [False, False]
@@ -508,6 +510,8 @@ def fit_n_agents_n_step_trading(env,
                     agent.reset_states()
                     if agent.processor is not None:
                         observations[i] = agent.processor.process_observation(observations[i])
+                    q_val = trade.agents[i].compute_q_values(observations[i])
+                    q_vals[i] = q_val
                     assert observations[i] is not None
                     # At this point, we expect to be fully initialized.
                     assert episode_rewards[i] is not None
@@ -527,6 +531,13 @@ def fit_n_agents_n_step_trading(env,
                     actions.append(np.random.randint(0, 4))
 
             observations, r, done, info = env.step(actions)
+
+            #todo calculate q_vals for trading before update_trading
+
+            r, suggested_steps, transfer, act_transfer = trade.update_trading(r, env, q_vals, suggested_steps, transfer)
+            accumulated_transfer += act_transfer
+            env.update_trade_colors(suggested_steps)
+
             observations = deepcopy(observations)
 
             for i in range(2):
@@ -536,14 +547,6 @@ def fit_n_agents_n_step_trading(env,
             q_vals_a2 = trade.agents[1].compute_q_values(observations[1])
 
             q_vals = [q_vals_a1, q_vals_a2]
-
-            r, suggested_steps, transfer, act_transfer = trade.update_trading(r, env, q_vals, suggested_steps, transfer)
-            accumulated_transfer += act_transfer
-            env.update_trade_colors(suggested_steps)
-
-            observations = deepcopy(observations)
-            episode_rewards += r
-
 
 
             # observations, r, done, info = contract.contracting_n_steps(env, observations, actions)

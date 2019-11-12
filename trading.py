@@ -15,11 +15,11 @@ def setup_action_space(step, trading_steps, tr_action_space):
     if tr_action_space is None:
         tr_action_space = [[0.0, 1.0], [0.0, -1.0], [-1.0, 0.0], [1.0, 0.0]]
     if step == 0:
-        if trading_steps != 0:
-            no_tr_action_space = [[0.0, 1.0], [0.0, -1.0], [-1.0, 0.0], [1.0, 0.0]]
-            for i in range(len(no_tr_action_space)):
-                no_tr_action_space[i] = no_tr_action_space[i] + [0.0, 0.0] * trading_steps
-            tr_action_space = no_tr_action_space + tr_action_space
+        # if trading_steps != 0:
+        #     no_tr_action_space = [[0.0, 1.0], [0.0, -1.0], [-1.0, 0.0], [1.0, 0.0]]
+        #     for i in range(len(no_tr_action_space)):
+        #         no_tr_action_space[i] = no_tr_action_space[i] + [0.0, 0.0] * trading_steps
+        #     tr_action_space = no_tr_action_space + tr_action_space
         return tr_action_space
     if step > 0:
         for i_actions in range(len(tr_action_space)):
@@ -70,9 +70,10 @@ class Trade:
                     del suggested_steps[agent_of_action][0]
 
                     if len(suggested_steps[agent_of_action]) == 0:
-                        rewards, transfer, act_agent_transfer = self.pay_reward((agent_of_action + 1) % 2, agent_of_action, r,
+                        rewards, transfer, act_agent_transfer = self.pay_reward((agent_of_action + 1) % 2, agent_of_action, rewards,
                                                                           transfer)
                         act_transfer[agent_of_action] += act_agent_transfer
+                        # act_transfer[agent_of_action] += transfer[agent_of_action]
                 else:
                     suggested_steps[agent_of_action] = []
 
@@ -96,7 +97,8 @@ class Trade:
                     else:
                         q_val = q_vals[0]
 
-                    transfer[i_trades] = np.max(q_val)
+                    # transfer[i_trades] = np.max(q_val) * 1.01
+                    transfer[i_trades] = 0.01
                     new_trade[i_trades] = False
 
         return rewards, suggested_steps, transfer, act_transfer

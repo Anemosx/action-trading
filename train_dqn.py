@@ -130,8 +130,10 @@ def train_trade():
             os.makedirs(model_dir)
 
         t = params.trading
-        if params.trading_steps > 0 and t != 0:
+        if params.trading_steps != 0:
             action_space = trading.setup_action_space(params.trading_steps, params.trading_steps, None)
+        else:
+            action_space = [[0.0, 1.0], [0.0, -1.0], [-1.0, 0.0], [1.0, 0.0]]
 
         env = Smartfactory(nb_agents=params.nb_agents,
                            field_width=params.field_width,
@@ -156,8 +158,8 @@ def train_trade():
             agent = build_agent(params=params, nb_actions=env.nb_actions,  processor=processor)
             agents.append(agent)
 
-        #agents[0].load_weights('experiments/20191112-12-08-51/run-0/trading-1/dqn_weights-agent-trade-0.h5f')
-        #agents[1].load_weights('experiments/20191112-12-08-51/run-0/trading-1/dqn_weights-agent-trade-1.h5f')
+        # agents[0].load_weights('experiments/20191112-18-35-03/run-0/trading-1/dqn_weights-agent-trade-0.h5f')
+        # agents[1].load_weights('experiments/20191112-18-35-03/run-0/trading-1/dqn_weights-agent-trade-1.h5f')
 
         # agents[0].load_weights('experiments/20190923-10-58-52/run-0/contracting-2/dqn_weights-agent-0.h5f')
         # agents[1].load_weights('experiments/20190923-10-58-52/run-0/contracting-2/dqn_weights-agent-1.h5f')
