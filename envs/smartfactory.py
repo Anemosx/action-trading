@@ -551,6 +551,7 @@ class Smartfactory(gym.Env):
                     self.colors['trade-{}'.format(i)] = (0.8, 0.8, 0.8, 1.0)
             else:
                 self.colors['trade-{}'.format(i)] = (1.0, 1.0, 1.0, 0.0)
+        return self.observation
 
     def render(self, mode='human', close=False, info_values=None, agent_id=None, video=False):
         if mode == 'rgb_array':

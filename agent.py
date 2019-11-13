@@ -487,6 +487,7 @@ def fit_n_agents_n_step_trading(env,
     agents_done = [False for _ in range(len(agents))]
     suggested_steps = [[], []]
     q_vals = [[],[]]
+    combined_frames = []
     transfer = np.zeros(len(agents))
 
     for agent in agents:
@@ -499,6 +500,8 @@ def fit_n_agents_n_step_trading(env,
                 q_vals = [[],[]]
                 transfer = np.zeros(len(agents))
                 suggested_steps = [[], []]
+                if episode == 250:
+                    combined_frames = drawing_util.render_combined_frames(combined_frames, env, [0, 0], 1, [0, 0])
                 for i, agent in enumerate(agents):
                     episode_steps = 0
                     episode_rewards[i] = 0
@@ -548,6 +551,8 @@ def fit_n_agents_n_step_trading(env,
 
             q_vals = [q_vals_a1, q_vals_a2]
 
+            if episode == 250:
+                combined_frames = drawing_util.render_combined_frames(combined_frames, env, r, 1, actions, q_vals)
 
             # observations, r, done, info = contract.contracting_n_steps(env, observations, actions)
             # observations = deepcopy(observations)
@@ -613,6 +618,7 @@ def fit_n_agents_n_step_trading(env,
                 episode_contracts = 0
                 agents_done = [False for _ in range(len(agents))]
                 episode += 1
+        export_video('Smart-Factory-Trading.mp4', combined_frames, None)
 
         df.to_csv(os.path.join(log_dir, 'train-values-trading-{}.csv'.format(trade is not None)))
 

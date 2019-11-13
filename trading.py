@@ -221,7 +221,6 @@ def main():
                         actions.append(0)
 
                 observations, r, done, info = env.step(actions)
-                observations = deepcopy(observations)
 
                 if trade is not None:
                     for i in range(2):
@@ -242,6 +241,14 @@ def main():
                                                                                       suggested_steps, transfer)
                     accumulated_transfer += act_transfer
                     env.update_trade_colors(suggested_steps)
+                #     observations = env.update_trade_colors(suggested_steps)
+                #     for i in range(2):
+                #         if trading_agents[i].processor is not None:
+                #             observations[i] = trading_agents[i].processor.process_observation(observations[i])
+                #     q_vals_a1 = trade.agents[0].compute_q_values(observations[0])
+                #     q_vals_a2 = trade.agents[1].compute_q_values(observations[1])
+                #
+                # q_vals = [q_vals_a1, q_vals_a2]
 
                 observations = deepcopy(observations)
                 episode_rewards += r

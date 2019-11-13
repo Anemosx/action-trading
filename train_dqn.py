@@ -158,8 +158,8 @@ def train_trade():
             agent = build_agent(params=params, nb_actions=env.nb_actions,  processor=processor)
             agents.append(agent)
 
-        # agents[0].load_weights('experiments/20191112-18-35-03/run-0/trading-1/dqn_weights-agent-trade-0.h5f')
-        # agents[1].load_weights('experiments/20191112-18-35-03/run-0/trading-1/dqn_weights-agent-trade-1.h5f')
+        # agents[0].load_weights('experiments/20191113-12-49-15/run-0/trading-1/dqn_weights-agent-trade-0.h5f')
+        # agents[1].load_weights('experiments/20191113-12-49-15/run-0/trading-1/dqn_weights-agent-trade-1.h5f')
 
         # agents[0].load_weights('experiments/20190923-10-58-52/run-0/contracting-2/dqn_weights-agent-0.h5f')
         # agents[1].load_weights('experiments/20190923-10-58-52/run-0/contracting-2/dqn_weights-agent-1.h5f')
