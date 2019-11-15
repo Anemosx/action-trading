@@ -161,29 +161,16 @@ def train_trade():
         # agents[0].load_weights('experiments/20191113-12-49-15/run-0/trading-1/dqn_weights-agent-trade-0.h5f')
         # agents[1].load_weights('experiments/20191113-12-49-15/run-0/trading-1/dqn_weights-agent-trade-1.h5f')
 
-        # agents[0].load_weights('experiments/20190923-10-58-52/run-0/contracting-2/dqn_weights-agent-0.h5f')
-        # agents[1].load_weights('experiments/20190923-10-58-52/run-0/contracting-2/dqn_weights-agent-1.h5f')
+        valuation_low_priority = build_agent(params=params, nb_actions=4, processor=processor)
+        valuation_low_priority.load_weights('experiments/20191106-11-32-13/run-0/contracting-0/dqn_weights-agent-0.h5f')
 
-        # policy_net = build_agent(params=params, nb_actions=4, processor=processor)
-        # policy_net.load_weights('experiments/20191105-20-36-43/run-0/contracting-0/dqn_weights-agent-0.h5f')
-        #
-        # valuation_net_low_prio = build_agent(params=params, nb_actions=4, processor=processor)
-        # valuation_net_low_prio.load_weights('experiments/20191106-11-32-13/run-0/contracting-0/dqn_weights-agent-0.h5f')
-        #
-        # valuation_net_high_prio = build_agent(params=params, nb_actions=4, processor=processor)
-        # valuation_net_high_prio.load_weights('experiments/20191106-11-30-59/run-0/contracting-0/dqn_weights-agent-0.h5f')
-        #
-        # valuation_nets = [valuation_net_low_prio, valuation_net_high_prio]
+        valuation_high_priority = build_agent(params=params, nb_actions=4, processor=processor)
+        valuation_high_priority.load_weights('experiments/20191106-11-30-59/run-0/contracting-0/dqn_weights-agent-0.h5f')
 
-        trade = trading.Trade(agent_1=agents[0], agent_2=agents[1], n_trade_steps=params.trading_steps,
+        valuation_nets = [valuation_low_priority, valuation_high_priority]
+
+        trade = trading.Trade(valuation_nets=valuation_nets, agent_1=agents[0], agent_2=agents[1], n_trade_steps=params.trading_steps,
                       mark_up=params.mark_up)
-
-        # contract = Contract(policy_net=policy_net,
-        #                     valuation_nets=valuation_nets,
-        #                     contracting_target_update=params.contracting_target_update,
-        #                     nb_contracting_steps=params.nb_contracting_steps,
-        #                     mark_up=params.mark_up,
-        #                     render=False)
 
         fit_n_agents_n_step_trading(env,
                                         agents=agents,
@@ -192,14 +179,6 @@ def train_trade():
                                         logger=neptune,
                                         log_dir=run_dir,
                                         trade=trade)
-
-        # fit_n_agents_n_step_contracting(env,
-        #                                 agents=agents,
-        #                                 nb_steps=params.nb_steps,
-        #                                 nb_max_episode_steps=500,
-        #                                 logger=neptune,
-        #                                 log_dir=run_dir,
-        #                                 contract=contract)
 
         for i_agent, agent in enumerate(agents):
             agent.save_weights(os.path.join(run_dir, 'dqn_weights-agent-trade-{}.h5f'.format(i_agent)), overwrite=True)

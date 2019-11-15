@@ -539,6 +539,7 @@ class Smartfactory(gym.Env):
         return current_actions
 
     def update_trade_colors(self, suggested_steps):
+        observations = deepcopy(self.observation)
         for i in range(len(suggested_steps)):
             if suggested_steps[i]:
                 if suggested_steps[i][1] == 1.0: # up
@@ -551,7 +552,7 @@ class Smartfactory(gym.Env):
                     self.colors['trade-{}'.format(i)] = (0.8, 0.8, 0.8, 1.0)
             else:
                 self.colors['trade-{}'.format(i)] = (1.0, 1.0, 1.0, 0.0)
-        return self.observation
+        return observations
 
     def render(self, mode='human', close=False, info_values=None, agent_id=None, video=False):
         if mode == 'rgb_array':

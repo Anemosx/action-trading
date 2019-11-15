@@ -471,10 +471,9 @@ def fit_n_agents_n_step_trading(env,
         agent.training = True
         agent._on_train_begin()
 
-    ep_columns = ['episode', 'trading', 'reward', 'number_contracts', 'episode_steps']
+    ep_columns = ['episode', 'trading', 'reward', 'number_contracts', 'episode_steps', 'episode_trades']
     for i_ag in range(len(agents)):
-        ag_columns = ['reward_a{}'.format(i_ag),
-                      'accumulated_transfer_a{}'.format(i_ag)]
+        ag_columns = ['reward_a{}'.format(i_ag), 'accumulated_transfer_a{}'.format(i_ag), 'trades_a-{}'.format(i_ag)]
         ep_columns += ag_columns
     df = pd.DataFrame(columns=ep_columns)
 
@@ -487,6 +486,7 @@ def fit_n_agents_n_step_trading(env,
     agents_done = [False for _ in range(len(agents))]
     suggested_steps = [[], []]
     q_vals = [[],[]]
+    trade_count = np.zeros(len(agents))
     combined_frames = []
     transfer = np.zeros(len(agents))
 
@@ -500,15 +500,15 @@ def fit_n_agents_n_step_trading(env,
                 q_vals = [[],[]]
                 transfer = np.zeros(len(agents))
                 suggested_steps = [[], []]
-                if episode == 250:
+                if episode % 100 == 0:
                     combined_frames = drawing_util.render_combined_frames(combined_frames, env, [0, 0], 1, [0, 0])
                 for i, agent in enumerate(agents):
                     episode_steps = 0
                     episode_rewards[i] = 0
                     episode_trades = 0
+                    trade_count[i] = 0
                     agents_done = [False for _ in range(len(agents))]
-                    accumulated_transfer = np.zeros(len(agents))
-                    greedy = [False, False]
+                    accumulated_transfer = 0
                     # Obtain the initial observation by resetting the environment.
                     agent.reset_states()
                     if agent.processor is not None:
@@ -519,7 +519,6 @@ def fit_n_agents_n_step_trading(env,
                     # At this point, we expect to be fully initialized.
                     assert episode_rewards[i] is not None
                     assert episode_steps is not None
-                    assert observations[i] is not None
 
             actions = []
             for i, agent in enumerate(agents):
@@ -534,14 +533,15 @@ def fit_n_agents_n_step_trading(env,
                     actions.append(np.random.randint(0, 4))
 
             observations, r, done, info = env.step(actions)
-
-            #todo calculate q_vals for trading before update_trading
-
-            r, suggested_steps, transfer, act_transfer = trade.update_trading(r, env, q_vals, suggested_steps, transfer)
-            accumulated_transfer += act_transfer
-            env.update_trade_colors(suggested_steps)
-
             observations = deepcopy(observations)
+
+            for i in range(2):
+                if agents[i].processor is not None:
+                    observations[i] = agents[i].processor.process_observation(observations[i])
+
+            r, suggested_steps, transfer, new_trades, act_transfer = trade.update_trading(r, env, observations, suggested_steps, transfer)
+
+            observations = env.update_trade_colors(suggested_steps)
 
             for i in range(2):
                 if agents[i].processor is not None:
@@ -551,17 +551,8 @@ def fit_n_agents_n_step_trading(env,
 
             q_vals = [q_vals_a1, q_vals_a2]
 
-            if episode == 250:
+            if episode % 100 == 0:
                 combined_frames = drawing_util.render_combined_frames(combined_frames, env, r, 1, actions, q_vals)
-
-            # observations, r, done, info = contract.contracting_n_steps(env, observations, actions)
-            # observations = deepcopy(observations)
-            #r, transfer = contract.get_compensated_rewards(env=env, rewards=r)
-            #accumulated_transfer += transfer
-
-            #for i, agent in enumerate(agents):
-            #    if agent.processor is not None:
-            #        observations[i], r[i], done, info = agent.processor.process_step(observations[i], r[i], done, info)
 
             if nb_max_episode_steps and episode_steps >= nb_max_episode_steps - 1:
                 # Force a terminal state.
@@ -570,9 +561,10 @@ def fit_n_agents_n_step_trading(env,
                     agent.done = True
 
             for i, agent in enumerate(agents):
-
                 agent.step += 1
                 episode_rewards[i] += r[i]
+                trade_count[i] += new_trades[i]
+                accumulated_transfer[i] += act_transfer[i]
 
                 if not agents_done[i]:
                     metrics = agent.backward(r[i], terminal=env.agents[i].done)
@@ -587,27 +579,17 @@ def fit_n_agents_n_step_trading(env,
             episode_steps += 1
 
             if done:
-                ep_stats = [episode, (trade is not None), np.sum(episode_rewards), int(episode_trades), episode_steps]
-
-                #logger.write_log('episode_return', np.sum(episode_rewards), episode)
-                #logger.write_log('contracting', int(episode_contracts), episode)
-                #logger.write_log('episode_steps', episode_steps, episode)
-
-                # logger.log_metric('iteration', episode)
+                ep_stats = [episode, (trade is not None), np.sum(episode_rewards), int(episode_trades), episode_steps, np.sum(trade_count)]
                 logger.log_metric('episode_return', np.sum(episode_rewards))
                 logger.log_metric('episode_steps', episode_steps)
-
+                logger.log_metric('episode_trades', np.sum(trade_count))
 
                 for i_ag in range(len(agents)):
-                    #logger.write_log('episode_return_agent-{}'.format(i_ag), episode_rewards[i_ag], episode)
-                    #logger.write_log('accumulated_transfer_a-{}'.format(i_ag), accumulated_transfer[i_ag], episode)
-                    #logger.write_log('episode-compensations-{}'.format(i_ag), env.agents[i_ag].episode_debts, episode)
-
                     logger.log_metric('episode_return_agent-{}'.format(i_ag), episode_rewards[i_ag])
                     logger.log_metric('accumulated_transfer_a-{}'.format(i_ag), accumulated_transfer[i_ag])
-                    #logger.log_metric('episode-compensations-{}'.format(i_ag).format(i_ag), env.agents[i_ag].episode_debts)
+                    logger.log_metric('trades_a-{}'.format(i_ag), trade_count[i_ag])
 
-                    ag_stats = [episode_rewards[i_ag], accumulated_transfer[i_ag]]
+                    ag_stats = [episode_rewards[i_ag], accumulated_transfer[i_ag], trade_count[i_ag]]
                     ep_stats += ag_stats
 
                 df.loc[episode] = ep_stats
