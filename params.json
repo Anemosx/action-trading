@@ -23,5 +23,6 @@
   "nb_contracting_steps": 30,
   "trading": 1,
   "trading_steps": 1,
+  "trading_budget": [10.0, 10.0],
   "mark_up": 1.0
 }

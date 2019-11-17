@@ -15,11 +15,11 @@ def setup_action_space(step, trading_steps, tr_action_space):
     if tr_action_space is None:
         tr_action_space = [[0.0, 1.0], [0.0, -1.0], [-1.0, 0.0], [1.0, 0.0]]
     if step == 0:
-        # if trading_steps != 0:
-        #     no_tr_action_space = [[0.0, 1.0], [0.0, -1.0], [-1.0, 0.0], [1.0, 0.0]]
-        #     for i in range(len(no_tr_action_space)):
-        #         no_tr_action_space[i] = no_tr_action_space[i] + [0.0, 0.0] * trading_steps
-        #     tr_action_space = no_tr_action_space + tr_action_space
+        if trading_steps != 0:
+            no_tr_action_space = [[0.0, 1.0], [0.0, -1.0], [-1.0, 0.0], [1.0, 0.0]]
+            for i in range(len(no_tr_action_space)):
+                no_tr_action_space[i] = no_tr_action_space[i] + [0.0, 0.0] * trading_steps
+            tr_action_space = no_tr_action_space + tr_action_space
         return tr_action_space
     if step > 0:
         for i_actions in range(len(tr_action_space)):
@@ -33,7 +33,7 @@ def setup_action_space(step, trading_steps, tr_action_space):
 
 class Trade:
 
-    def __init__(self, valuation_nets, agent_1, agent_2, n_trade_steps, mark_up):
+    def __init__(self, valuation_nets, agent_1, agent_2, n_trade_steps, mark_up, trading_budget):
         self.agent_1 = agent_1
         self.agent_2 = agent_2
         self.agents = [agent_1, agent_2]
@@ -41,6 +41,7 @@ class Trade:
         self.n_trade_steps = n_trade_steps
         self.mark_up = mark_up
         self.valuation_nets = valuation_nets
+        self.trading_budget = trading_budget
 
     # trading part of step
     #   set flag to adding suggestion actions
@@ -74,7 +75,7 @@ class Trade:
                     if len(suggested_steps[agent_of_action]) == 0:
                         rewards, transfer, act_agent_transfer, trade_success = self.pay_reward((agent_of_action + 1) % 2, agent_of_action, rewards,
                                                                           transfer)
-                        act_transfer[agent_of_action] += act_agent_transfer
+                        act_transfer[(agent_of_action + 1) % 2] += act_agent_transfer
                         if trade_success:
                             new_trades[(agent_of_action + 1) % 2] += 1
                         # act_transfer[agent_of_action] += transfer[agent_of_action]
@@ -113,14 +114,24 @@ class Trade:
         new_rewards = deepcopy(rewards)
         new_transfer = [0, 0]
 
-        if new_rewards[payer] - transfer_value[receiver] >= 0:
-            new_rewards[payer] -= transfer_value[receiver]
-            new_rewards[receiver] += transfer_value[receiver]
-            act_transfer = transfer_value[receiver]
+        if self.trading_budget[payer] > 0:
+            if self.trading_budget[payer] - transfer_value[receiver] < 0:
+                transfer_value[receiver] = deepcopy(self.trading_budget[payer])
 
-            new_transfer[payer] = transfer_value[payer]
-            new_transfer[receiver] = 0
-            trade_success = True
+            if new_rewards[payer] - transfer_value[receiver] >= 0:
+                new_rewards[payer] -= transfer_value[receiver]
+                new_rewards[receiver] += transfer_value[receiver]
+                act_transfer = transfer_value[receiver]
+
+                new_transfer[payer] = transfer_value[payer]
+                new_transfer[receiver] = 0
+
+                self.trading_budget[payer] -= transfer_value[receiver]
+                trade_success = True
+            else:
+                new_transfer = transfer_value
+                act_transfer = 0
+                trade_success = False
         else:
             new_transfer = transfer_value
             act_transfer = 0
@@ -228,7 +239,7 @@ def main():
         valuation_nets = [valuation_low_priority, valuation_high_priority]
 
         trade = Trade(valuation_nets=valuation_nets, agent_1=trading_agents[0], agent_2=trading_agents[1], n_trade_steps=params.trading_steps,
-                      mark_up=params.mark_up)
+                      mark_up=params.mark_up, trading_budget=params.trading_budget)
     else:
         trade = None
 
@@ -248,6 +259,7 @@ def main():
         q_vals = [[], []]
         trade_count = np.zeros(params.nb_agents)
         suggested_steps = [[], []]
+        trade.trading_budget = deepcopy(params.trading_budget)
 
         if trade is not None:
             for i in range(2):
@@ -310,7 +322,9 @@ def main():
             trade_count += new_trades
             episode_rewards += r
 
-            combined_frames = drawing_util.render_combined_frames(combined_frames, env, r, params.trading, actions, q_vals)
+            if not env.agents[0].done and not env.agents[1].done:
+                for i in range(3):
+                    combined_frames = drawing_util.render_combined_frames(combined_frames, env, r, params.trading, actions, q_vals)
 
             if done:
                 ep_stats = [i_episode, (trade is not None), np.sum(episode_rewards), 0, episode_steps, np.sum(trade_count)]

@@ -113,6 +113,8 @@ def train_trade():
     neptune.init('arno/trading-agents',
                  api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzMDc2ZmU2YS1lYWFkLTQwNjUtOTgyMS00OTczMGU4NDYzNzcifQ==')
 
+    # neptune.init('Trading-Agents/Trading-Agents',
+    #              api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzMDc2ZmU2YS1lYWFkLTQwNjUtOTgyMS00OTczMGU4NDYzNzcifQ==')
 
     with neptune.create_experiment(name='trading-agents',
                                    params=params_json):
@@ -129,7 +131,8 @@ def train_trade():
         if not os.path.exists(model_dir):
             os.makedirs(model_dir)
 
-        t = params.trading
+        render_video = True
+
         if params.trading_steps != 0:
             action_space = trading.setup_action_space(params.trading_steps, params.trading_steps, None)
         else:
@@ -140,7 +143,7 @@ def train_trade():
                            field_height=params.field_height,
                            rewards=params.rewards,
                            step_penalties=params.step_penalties,
-                           trading=t,
+                           trading=params.trading,
                            trading_steps=params.trading_steps,
                            trading_actions=action_space,
                            contracting=0,
@@ -158,8 +161,8 @@ def train_trade():
             agent = build_agent(params=params, nb_actions=env.nb_actions,  processor=processor)
             agents.append(agent)
 
-        # agents[0].load_weights('experiments/20191113-12-49-15/run-0/trading-1/dqn_weights-agent-trade-0.h5f')
-        # agents[1].load_weights('experiments/20191113-12-49-15/run-0/trading-1/dqn_weights-agent-trade-1.h5f')
+        # agents[0].load_weights('experiments/20191116-12-22-58/run-0/trading-1/dqn_weights-agent-trade-0.h5f')
+        # agents[1].load_weights('experiments/20191116-12-22-58/run-0/trading-1/dqn_weights-agent-trade-1.h5f')
 
         valuation_low_priority = build_agent(params=params, nb_actions=4, processor=processor)
         valuation_low_priority.load_weights('experiments/20191106-11-32-13/run-0/contracting-0/dqn_weights-agent-0.h5f')
@@ -170,7 +173,7 @@ def train_trade():
         valuation_nets = [valuation_low_priority, valuation_high_priority]
 
         trade = trading.Trade(valuation_nets=valuation_nets, agent_1=agents[0], agent_2=agents[1], n_trade_steps=params.trading_steps,
-                      mark_up=params.mark_up)
+                      mark_up=params.mark_up, trading_budget=params.trading_budget)
 
         fit_n_agents_n_step_trading(env,
                                         agents=agents,
@@ -178,7 +181,9 @@ def train_trade():
                                         nb_max_episode_steps=500,
                                         logger=neptune,
                                         log_dir=run_dir,
-                                        trade=trade)
+                                        trading_budget=params.trading_budget,
+                                        trade=trade,
+                                        render_video=render_video)
 
         for i_agent, agent in enumerate(agents):
             agent.save_weights(os.path.join(run_dir, 'dqn_weights-agent-trade-{}.h5f'.format(i_agent)), overwrite=True)
