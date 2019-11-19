@@ -110,11 +110,11 @@ def train_trade():
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
-    neptune.init('arno/trading-agents',
-                 api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzMDc2ZmU2YS1lYWFkLTQwNjUtOTgyMS00OTczMGU4NDYzNzcifQ==')
-
-    # neptune.init('Trading-Agents/Trading-Agents',
+    # neptune.init('arno/trading-agents',
     #              api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzMDc2ZmU2YS1lYWFkLTQwNjUtOTgyMS00OTczMGU4NDYzNzcifQ==')
+
+    neptune.init('Trading-Agents/Trading-Agents',
+                 api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzMDc2ZmU2YS1lYWFkLTQwNjUtOTgyMS00OTczMGU4NDYzNzcifQ==')
 
     with neptune.create_experiment(name='trading-agents',
                                    params=params_json):
@@ -161,8 +161,8 @@ def train_trade():
             agent = build_agent(params=params, nb_actions=env.nb_actions,  processor=processor)
             agents.append(agent)
 
-        # agents[0].load_weights('experiments/20191116-12-22-58/run-0/trading-1/dqn_weights-agent-trade-0.h5f')
-        # agents[1].load_weights('experiments/20191116-12-22-58/run-0/trading-1/dqn_weights-agent-trade-1.h5f')
+        # agents[0].load_weights('experiments/20191118-21-07-55/run-0/trading-1/dqn_weights-agent-trade-0.h5f')
+        # agents[1].load_weights('experiments/20191118-21-07-55/run-0/trading-1/dqn_weights-agent-trade-1.h5f')
 
         valuation_low_priority = build_agent(params=params, nb_actions=4, processor=processor)
         valuation_low_priority.load_weights('experiments/20191106-11-32-13/run-0/contracting-0/dqn_weights-agent-0.h5f')

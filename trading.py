@@ -69,16 +69,14 @@ class Trade:
             if len(suggested_steps[agent_of_action]) != 0:
                 if suggested_steps[agent_of_action][0] == current_actions[i_agents][1][0] and \
                         suggested_steps[agent_of_action][1] == current_actions[i_agents][1][1]:
-                    del suggested_steps[agent_of_action][0]
-                    del suggested_steps[agent_of_action][0]
-
+                    suggested_steps[agent_of_action] = suggested_steps[agent_of_action][2:]
                     if len(suggested_steps[agent_of_action]) == 0:
-                        rewards, transfer, act_agent_transfer, trade_success = self.pay_reward((agent_of_action + 1) % 2, agent_of_action, rewards,
-                                                                          transfer)
-                        act_transfer[(agent_of_action + 1) % 2] += act_agent_transfer
+                        rewards, transfer, act_transfer, trade_success = self.pay_reward((agent_of_action + 1) % 2, agent_of_action, rewards,
+                                                                          transfer, act_transfer)
                         if trade_success:
                             new_trades[(agent_of_action + 1) % 2] += 1
-                        # act_transfer[agent_of_action] += transfer[agent_of_action]
+                    else:
+                        transfer[agent_of_action] += self.compensation_value(agent_of_action, suggested_steps[agent_of_action][:2], env.priorities, observations)
                 else:
                     suggested_steps[agent_of_action] = []
 
@@ -92,25 +90,19 @@ class Trade:
         for i_trades in range(len(new_trade)):
             if new_trade[i_trades]:
                 copy_action_from = (i_trades + 1) % 2
-                del current_actions[copy_action_from][1][0]
-                del current_actions[copy_action_from][1][0]
-                if current_actions[copy_action_from][1] != [0.0, 0.0]:
+                current_actions[copy_action_from][1] = current_actions[copy_action_from][1][2:]
+                suggest = False
+                for i in range(self.n_trade_steps*2):
+                    if current_actions[copy_action_from][1][i] != 0.0:
+                        suggest = True
+                if suggest:
                     suggested_steps[i_trades] = deepcopy(current_actions[copy_action_from][1])
-
-                    # if copy_action_from == 0:
-                    #     q_val = q_vals[1]
-                    # else:
-                    #     q_val = q_vals[0]
-                    # transfer[i_trades] = np.max(q_val) * 1.01
-                    # transfer[i_trades] = 0.01
-
-                    action = [suggested_steps[i_trades][0], suggested_steps[i_trades][1]]
-                    transfer[i_trades] = self.compensation_value(i_trades, action, env.priorities, observations)
+                    transfer[i_trades] = self.compensation_value(i_trades, suggested_steps[i_trades][:2], env.priorities, observations)
                     new_trade[i_trades] = False
 
         return rewards, suggested_steps, transfer, new_trades, act_transfer
 
-    def pay_reward(self, payer, receiver, rewards, transfer_value):
+    def pay_reward(self, payer, receiver, rewards, transfer_value, act_transfer):
         new_rewards = deepcopy(rewards)
         new_transfer = [0, 0]
 
@@ -121,20 +113,16 @@ class Trade:
             if new_rewards[payer] - transfer_value[receiver] >= 0:
                 new_rewards[payer] -= transfer_value[receiver]
                 new_rewards[receiver] += transfer_value[receiver]
-                act_transfer = transfer_value[receiver]
-
-                new_transfer[payer] = transfer_value[payer]
+                new_transfer[payer] = deepcopy(transfer_value[payer])
                 new_transfer[receiver] = 0
-
                 self.trading_budget[payer] -= transfer_value[receiver]
+                act_transfer[payer] += deepcopy(transfer_value[receiver])
                 trade_success = True
             else:
                 new_transfer = transfer_value
-                act_transfer = 0
                 trade_success = False
         else:
             new_transfer = transfer_value
-            act_transfer = 0
             trade_success = False
 
         return new_rewards, new_transfer, act_transfer, trade_success
