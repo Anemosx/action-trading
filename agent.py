@@ -546,7 +546,7 @@ def fit_n_agents_n_step_trading(env,
 
             r, suggested_steps, transfer, new_trades, act_transfer = trade.update_trading(r, env, observations, suggested_steps, transfer)
 
-            observations = env.update_trade_colors(suggested_steps)
+            observations = env.update_n_trade_colors(suggested_steps)
 
             for i in range(2):
                 if agents[i].processor is not None:
