@@ -205,6 +205,7 @@ def main():
                        trading=params.trading,
                        trading_steps=params.trading_steps,
                        trading_actions=action_space,
+                       trading_signals=params.trading_signals,
                        contracting=0,
                        priorities=params.priorities,
                        nb_machine_types=params.nb_machine_types,
@@ -291,6 +292,8 @@ def main():
                 r, suggested_steps, transfer, new_trades, act_transfer = trade.update_trading(r, env, observations, suggested_steps, transfer)
 
                 observations = env.update_trade_colors(suggested_steps)
+
+                print(suggested_steps)
 
             if trade is not None:
                 for i in range(2):
