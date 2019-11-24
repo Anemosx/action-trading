@@ -457,9 +457,11 @@ def fit_n_agents_n_step_contracting(env,
 def fit_n_agents_n_step_trading(env,
                                     nb_steps,
                                     agents=None,
+                                    no_tr_agents=None,
                                     nb_max_episode_steps=None,
                                     logger=None,
                                     log_dir=None,
+                                    trading=None,
                                     trading_budget=None,
                                     trade=None,
                                     render_video=False):
@@ -531,6 +533,14 @@ def fit_n_agents_n_step_trading(env,
                 # This is were all of the work happens. We first perceive and compute the action
                 # (forward step) and then use the reward to improve (backward step).
                 if not env.agents[i].done:
+                    if trading == 2:
+                        tr_checks = trade.check_actions(suggested_steps)
+                        if tr_checks[i]:
+                            actions.append(agent.forward(observations[i]) + 4)
+                        else:
+                            actions.append(no_tr_agents[i].forward(observations[i]))
+                    else:
+                        actions.append(agent.forward(observations[i]))
                     actions.append(agent.forward(observations[i]))
                     if agent.processor is not None:
                         actions[i] = agent.processor.process_action(actions[i])

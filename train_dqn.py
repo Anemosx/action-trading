@@ -1,6 +1,8 @@
 import os
+from copy import deepcopy
+
 from dotmap import DotMap
-from agent import build_agent, fit_n_agents_n_step_contracting, test_n_agents_n_step_contracting, fit_n_agents_n_step_trading
+from agent import build_agent, fit_n_agents_n_step_contracting, test_n_agents_n_step_contracting, fit_n_agents_n_step_trading, fit_n_agents_n_step_trading1
 from envs.smartfactory import Smartfactory
 from common_utils.utils import save_params
 from visualization import TensorBoardLogger
@@ -157,9 +159,17 @@ def train_trade():
         save_params(params, run_dir)
 
         agents = []
+        no_tr_agents = []
         for _ in range(params.nb_agents):
-            agent = build_agent(params=params, nb_actions=env.nb_actions,  processor=processor)
-            agents.append(agent)
+            if params.trading == 2:
+                agent = build_agent(params=params, nb_actions=env.nb_actions - 4, processor=processor)
+                agents.append(agent)
+
+                no_tr_agent = build_agent(params=params, nb_actions=4, processor=processor)
+                no_tr_agents.append(no_tr_agent)
+            else:
+                agent = build_agent(params=params, nb_actions=env.nb_actions, processor=processor)
+                agents.append(agent)
 
         # agents[0].load_weights('experiments/20191118-21-07-55/run-0/trading-1/dqn_weights-agent-trade-0.h5f')
         # agents[1].load_weights('experiments/20191118-21-07-55/run-0/trading-1/dqn_weights-agent-trade-1.h5f')
@@ -177,10 +187,12 @@ def train_trade():
 
         fit_n_agents_n_step_trading(env,
                                         agents=agents,
+                                        no_tr_agents=no_tr_agents,
                                         nb_steps=params.nb_steps,
                                         nb_max_episode_steps=500,
                                         logger=neptune,
                                         log_dir=run_dir,
+                                        trading=params.trading,
                                         trading_budget=params.trading_budget,
                                         trade=trade,
                                         render_video=render_video)
