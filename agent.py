@@ -478,7 +478,6 @@ def fit_n_agents_n_step_trading(env,
     ep_columns = ['episode', 'trading', 'reward', 'number_contracts', 'episode_steps', 'episode_trades']
     for i_ag in range(len(agents)):
         ag_columns = ['reward_a{}'.format(i_ag), 'accumulated_transfer_a{}'.format(i_ag), 'trades_a-{}'.format(i_ag)]
-        # ag_columns = ['reward_a{}'.format(i_ag), 'accumulated_transfer_a{}'.format(i_ag), 'trades_a-{}'.format(i_ag), 'budget_a-{}'.format(i_ag)]
         ep_columns += ag_columns
     df = pd.DataFrame(columns=ep_columns)
 
@@ -490,8 +489,10 @@ def fit_n_agents_n_step_trading(env,
     episode_trades = 0
     agents_done = [False for _ in range(len(agents))]
     suggested_steps = [[], []]
-    q_vals = [[],[]]
+    q_vals = [[], []]
     trade_count = np.zeros(len(agents))
+    new_trades = np.zeros(len(agents))
+    act_transfer = np.zeros(len(agents))
     combined_frames = []
     transfer = np.zeros(len(agents))
     trade.trading_budget = deepcopy(trading_budget)
@@ -503,19 +504,21 @@ def fit_n_agents_n_step_trading(env,
         while agents[0].step < nb_steps:
             if observations[0] is None:  # start of a new episode
                 observations = deepcopy(env.reset())
-                q_vals = [[],[]]
+                q_vals = [[], []]
                 transfer = np.zeros(len(agents))
                 suggested_steps = [[], []]
                 trade.trading_budget = deepcopy(trading_budget)
                 if episode % 100 == 0 and render_video:
-                    combined_frames = drawing_util.render_combined_frames(combined_frames, env, [0, 0], 1, [0, 0])
+                    combined_frames = drawing_util.render_combined_frames(combined_frames, env, [0, 0], 0, [0, 0])
                 for i, agent in enumerate(agents):
                     episode_steps = 0
                     episode_rewards[i] = 0
                     episode_trades = 0
                     trade_count[i] = 0
+                    new_trades[i] = 0
                     agents_done = [False for _ in range(len(agents))]
                     accumulated_transfer[i] = 0
+                    act_transfer[i] = 0
                     # Obtain the initial observation by resetting the environment.
                     agent.reset_states()
                     if agent.processor is not None:
@@ -541,7 +544,6 @@ def fit_n_agents_n_step_trading(env,
                             actions.append(no_tr_agents[i].forward(observations[i]))
                     else:
                         actions.append(agent.forward(observations[i]))
-                    actions.append(agent.forward(observations[i]))
                     if agent.processor is not None:
                         actions[i] = agent.processor.process_action(actions[i])
                 else:
@@ -550,26 +552,28 @@ def fit_n_agents_n_step_trading(env,
             observations, r, done, info = env.step(actions)
             observations = deepcopy(observations)
 
-            for i in range(2):
+            if trade.n_trade_steps > 0:
+                for i in range(len(agents)):
+                    if agents[i].processor is not None:
+                        observations[i] = agents[i].processor.process_observation(observations[i])
+
+                r, suggested_steps, transfer, new_trades, act_transfer = trade.update_trading(r, episode_rewards, env, observations, suggested_steps, transfer)
+                observations = env.update_trade_colors(suggested_steps)
+
+            for i in range(len(agents)):
                 if agents[i].processor is not None:
                     observations[i] = agents[i].processor.process_observation(observations[i])
-
-            r, suggested_steps, transfer, new_trades, act_transfer = trade.update_trading(r, env, observations, suggested_steps, transfer)
-
-            observations = env.update_trade_colors(suggested_steps)
-
-            for i in range(2):
-                if agents[i].processor is not None:
-                    observations[i] = agents[i].processor.process_observation(observations[i])
-            q_vals_a1 = trade.agents[0].compute_q_values(observations[0])
-            q_vals_a2 = trade.agents[1].compute_q_values(observations[1])
-
-            q_vals = [q_vals_a1, q_vals_a2]
+                    q_vals[i] = agents[i].compute_q_values(observations[i])
 
             if episode % 100 == 0 and render_video:
                 if not env.agents[0].done and not env.agents[1].done:
+                    info_trade = 0
+                    if trade.n_trade_steps > 0:
+                        for i in range(len(new_trades)):
+                            if new_trades[i] != 0:
+                                info_trade = 1
                     for i in range(3):
-                        combined_frames = drawing_util.render_combined_frames(combined_frames, env, r, 1, actions, q_vals)
+                        combined_frames = drawing_util.render_combined_frames(combined_frames, env, r, info_trade, actions, q_vals)
 
             if nb_max_episode_steps and episode_steps >= nb_max_episode_steps - 1:
                 # Force a terminal state.
@@ -580,8 +584,9 @@ def fit_n_agents_n_step_trading(env,
             for i, agent in enumerate(agents):
                 agent.step += 1
                 episode_rewards[i] += r[i]
-                trade_count[i] += new_trades[i]
-                accumulated_transfer[i] += act_transfer[i]
+                if trade.n_trade_steps > 0:
+                    trade_count[i] += new_trades[i]
+                    accumulated_transfer[i] += act_transfer[i]
 
                 if not agents_done[i]:
                     metrics = agent.backward(r[i], terminal=env.agents[i].done)
@@ -605,23 +610,18 @@ def fit_n_agents_n_step_trading(env,
                     logger.log_metric('episode_return_agent-{}'.format(i_ag), episode_rewards[i_ag])
                     logger.log_metric('accumulated_transfer_a-{}'.format(i_ag), accumulated_transfer[i_ag])
                     logger.log_metric('trades_a-{}'.format(i_ag), trade_count[i_ag])
-                    # logger.log_metric('budget_a-{}'.format(i_ag), trade.trading_budget[i_ag])
 
                     ag_stats = [episode_rewards[i_ag], accumulated_transfer[i_ag], trade_count[i_ag]]
-                    # ag_stats = [episode_rewards[i_ag], accumulated_transfer[i_ag], trade_count[i_ag], trade.trading_budget[i_ag]]
                     ep_stats += ag_stats
 
                 df.loc[episode] = ep_stats
-
                 observations = [None for _ in agents]
                 episode_steps = 0
                 episode_rewards = [None for _ in agents]
-                episode_contracts = 0
                 agents_done = [False for _ in range(len(agents))]
                 episode += 1
         if render_video:
             export_video('Smart-Factory-Trading.mp4', combined_frames, None)
-
         df.to_csv(os.path.join(log_dir, 'train-values-trading-{}.csv'.format(trade is not None)))
 
     except KeyboardInterrupt:

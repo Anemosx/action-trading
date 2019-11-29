@@ -25,5 +25,6 @@
   "trading_steps": 1,
   "trading_signals": 1,
   "trading_budget": [10.0, 10.0],
+  "pay_up_front" : 0,
   "mark_up": 1.0
 }
