@@ -41,10 +41,9 @@ class Trade:
         self.valuation_nets = valuation_nets
         self.trading_budget = trading_budget
 
-    def update_trading(self, r, episode_rewards, env, observations, suggested_steps, transfer):
+    def update_trading(self, rewards, episode_rewards, env, observations, suggested_steps, transfer):
         act_transfer = np.zeros(self.agent_count)
-        current_actions = deepcopy(env.get_current_actions())
-        rewards = deepcopy(r)
+        current_actions = env.get_current_actions()
         new_trades = [0, 0]
 
         if self.n_trade_steps == 0:
@@ -68,90 +67,87 @@ class Trade:
                 else:
                     suggested_steps[agent_of_action] = []
 
-        new_trade = [False, False]
+        new_suggestions = [False, False]
         for i_agents in range(self.agent_count):
             if len(suggested_steps[i_agents]) == 0:
-                new_trade[i_agents] = True
+                new_suggestions[i_agents] = True
             else:
-                new_trade[i_agents] = False
+                new_suggestions[i_agents] = False
 
-        for i_trades in range(len(new_trade)):
-            if new_trade[i_trades]:
-                copy_action_from = (i_trades + 1) % 2
+        for i_suggestion in range(len(new_suggestions)):
+            if new_suggestions[i_suggestion]:
+                copy_action_from = (i_suggestion + 1) % 2
                 current_actions[copy_action_from][1] = current_actions[copy_action_from][1][2:]
                 suggest = False
-                for i in range(self.n_trade_steps*2):
+                for i in range(len(current_actions[copy_action_from][1])):
                     if current_actions[copy_action_from][1][i] != 0.0:
                         suggest = True
                 if suggest:
-                    suggested_steps[i_trades] = deepcopy(current_actions[copy_action_from][1])
-                    transfer[i_trades] = self.compensation_value(i_trades, suggested_steps[i_trades][:2], env.priorities, observations)
+                    suggested_steps[i_suggestion] = deepcopy(current_actions[copy_action_from][1])
+                    transfer[i_suggestion] = self.compensation_value(i_suggestion, suggested_steps[i_suggestion][:2], env.priorities, observations)
                     if self.pay_up_front == 1:
-                        rewards, transfer, act_transfer, trade_success = self.pay_reward(i_trades, rewards, episode_rewards, transfer)
-                        transfer = np.zeros(self.agent_count)
-                    new_trade[i_trades] = False
+                        rewards, transfer, act_transfer, trade_success = self.pay_reward(i_suggestion, rewards, episode_rewards, transfer)
+                        transfer[i_suggestion] = 0
 
         return rewards, suggested_steps, transfer, new_trades, act_transfer
 
-    def pay_reward(self, receiver, rewards, episode_rewards, transfer_value):
+    def pay_reward(self, receiver, rewards, episode_rewards, transfer):
         trade_success = False
         act_transfer = [0, 0]
         payer = (receiver + 1) % 2
 
         if self.trading_budget[payer] > 0:
-            if self.trading_budget[payer] - transfer_value[receiver] < 0:
-                transfer_value[receiver] = deepcopy(self.trading_budget[payer])
+            if self.trading_budget[payer] - transfer[receiver] < 0:
+                transfer[receiver] = deepcopy(self.trading_budget[payer])
 
-            if episode_rewards[payer] - transfer_value[receiver] >= 0:
-                rewards[payer] -= transfer_value[receiver]
-                rewards[receiver] += transfer_value[receiver]
-                self.trading_budget[payer] -= transfer_value[receiver]
-                act_transfer[payer] += transfer_value[receiver]
-                transfer_value[payer] = transfer_value[payer]
-                transfer_value[receiver] = 0
+            if episode_rewards[payer] - transfer[receiver] >= 0:
+                rewards[payer] -= transfer[receiver]
+                rewards[receiver] += transfer[receiver]
+                self.trading_budget[payer] -= transfer[receiver]
+                act_transfer[payer] += transfer[receiver]
+                transfer[receiver] = 0
                 trade_success = True
 
-        return rewards, transfer_value, act_transfer, trade_success
+        return rewards, transfer, act_transfer, trade_success
 
     def check_actions(self, suggested_steps):
         tr_action_possibility = [False, False]
         if self.n_trade_steps == 0:
             return tr_action_possibility
+
         for i_agent in range(self.agent_count):
-            if not suggested_steps[(i_agent + 1) % 2]:
+            if len(suggested_steps[(i_agent + 1) % 2]) == 0:
                 tr_action_possibility[i_agent] = True
+
         return tr_action_possibility
 
     def compensation_value(self, receiver, action, priorities, observations):
-        q_val_index = -1
+        action_index = -1
         if action[1] == 1.0:  # up
-            q_val_index = 0
+            action_index = 0
         if action[1] == -1.0:  # down
-            q_val_index = 1
+            action_index = 1
         if action[0] == -1.0:  # left
-            q_val_index = 2
+            action_index = 2
         if action[0] == 1.0:  # right
-            q_val_index = 3
-
-        if action == [0.0, 0.0] or q_val_index == -1:
-            return 0
+            action_index = 3
 
         if priorities[receiver] == 0:
             # low priority
             if receiver == 0:
                 highest_q_value = np.max(self.valuation_nets[0].compute_q_values(observations[0]))
-                action_q_value = self.valuation_nets[0].compute_q_values(observations[0])[q_val_index]
+                action_q_value = self.valuation_nets[0].compute_q_values(observations[0])[action_index]
             else:
                 highest_q_value = np.max(self.valuation_nets[0].compute_q_values(observations[1]))
-                action_q_value = self.valuation_nets[0].compute_q_values(observations[1])[q_val_index]
+                action_q_value = self.valuation_nets[0].compute_q_values(observations[1])[action_index]
         else:
             # high priority
             if receiver == 0:
                 highest_q_value = np.max(self.valuation_nets[1].compute_q_values(observations[0]))
-                action_q_value = self.valuation_nets[1].compute_q_values(observations[0])[q_val_index]
+                action_q_value = self.valuation_nets[1].compute_q_values(observations[0])[action_index]
             else:
                 highest_q_value = np.max(self.valuation_nets[1].compute_q_values(observations[1]))
-                action_q_value = self.valuation_nets[1].compute_q_values(observations[1])[q_val_index]
+                action_q_value = self.valuation_nets[1].compute_q_values(observations[1])[action_index]
 
         compensation = (highest_q_value - action_q_value) * self.mark_up
 
@@ -259,7 +255,7 @@ def main():
             observations, r, done, info = env.step(actions)
             observations = deepcopy(observations)
 
-            if trade.n_trade_steps > 0:
+            if trade.n_trade_steps > 0 and not done:
                 for i in range(params.nb_agents):
                     if trade.agents[i].processor is not None:
                         observations[i] = trade.agents[i].processor.process_observation(observations[i])
@@ -295,8 +291,8 @@ def main():
                 df.loc[i_episode] = ep_stats
                 break
 
-        print("Rewards: \n", episode_rewards)
-        print("Trades: \n", trade_count)
+        print("Rewards: ", episode_rewards)
+        print("Trades: ", trade_count)
 
         # df.to_csv(os.path.join('test-values-trading-t-{}.csv'.format(0)))
         export_video('Smart-Factory-Trading.mp4', combined_frames, None)

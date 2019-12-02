@@ -540,7 +540,7 @@ class Smartfactory(gym.Env):
 
     def set_log(self, agent_index, action):
         taken_action = [agent_index, action]
-        self.actions_log.append(deepcopy(taken_action))
+        self.actions_log.append(taken_action)
 
     def get_current_actions(self):
         current_actions = []
@@ -557,13 +557,13 @@ class Smartfactory(gym.Env):
                 for i_steps in range(self.trading_steps):
                     if suggested_steps_copy[i]:
                         if suggested_steps_copy[i][1] == 1.0:  # up
-                            self.colors['trade-{}'.format(i + i_steps * 2)] = (0.2, 0.2, 0.2, 1.0)
+                            self.colors['trade-{}'.format(i + i_steps * 2)] = (0.0, 0.0, 0.0, 1.0)
                         if suggested_steps_copy[i][1] == -1.0:  # down
-                            self.colors['trade-{}'.format(i + i_steps * 2)] = (0.4, 0.4, 0.4, 1.0)
+                            self.colors['trade-{}'.format(i + i_steps * 2)] = (0.33, 0.33, 0.33, 1.0)
                         if suggested_steps_copy[i][0] == -1.0:  # left
-                            self.colors['trade-{}'.format(i + i_steps * 2)] = (0.6, 0.6, 0.6, 1.0)
+                            self.colors['trade-{}'.format(i + i_steps * 2)] = (0.66, 0.66, 0.66, 1.0)
                         if suggested_steps_copy[i][0] == 1.0:  # right
-                            self.colors['trade-{}'.format(i + i_steps * 2)] = (0.8, 0.8, 0.8, 1.0)
+                            self.colors['trade-{}'.format(i + i_steps * 2)] = (1.0, 1.0, 1.0, 1.0)
                         suggested_steps_copy[i] = suggested_steps_copy[i][2:]
                     else:
                         self.colors['trade-{}'.format(i + i_steps * 2)] = (1.0, 1.0, 1.0, 0.0)
@@ -571,35 +571,15 @@ class Smartfactory(gym.Env):
             for i in range(len(suggested_steps)):
                 if suggested_steps[i]:
                     if suggested_steps[i][1] == 1.0:  # up
-                        self.colors['trade-{}'.format(i)] = (0.2, 0.2, 0.2, 1.0)
+                        self.colors['trade-{}'.format(i)] = (0.0, 0.0, 0.0, 1.0)
                     if suggested_steps[i][1] == -1.0:  # down
-                        self.colors['trade-{}'.format(i)] = (0.4, 0.4, 0.4, 1.0)
+                        self.colors['trade-{}'.format(i)] = (0.33, 0.33, 0.33, 1.0)
                     if suggested_steps[i][0] == -1.0:  # left
-                        self.colors['trade-{}'.format(i)] = (0.6, 0.6, 0.6, 1.0)
+                        self.colors['trade-{}'.format(i)] = (0.66, 0.66, 0.66, 1.0)
                     if suggested_steps[i][0] == 1.0:  # right
-                        self.colors['trade-{}'.format(i)] = (0.8, 0.8, 0.8, 1.0)
+                        self.colors['trade-{}'.format(i)] = (1.0, 1.0, 1.0, 1.0)
                 else:
                     self.colors['trade-{}'.format(i)] = (1.0, 1.0, 1.0, 0.0)
-        return observations
-
-    def update_n_trade_colors(self, suggested_steps):
-        observations = deepcopy(self.observation)
-        suggested_steps_copy = deepcopy(suggested_steps)
-
-        for i in range(len(suggested_steps)):
-            for i_steps in range(self.trading_steps):
-                if suggested_steps_copy[i]:
-                    if suggested_steps_copy[i][1] == 1.0:  # up
-                        self.colors['trade-{}'.format(i+i_steps*2)] = (0.2, 0.2, 0.2, 1.0)
-                    if suggested_steps_copy[i][1] == -1.0:  # down
-                        self.colors['trade-{}'.format(i+i_steps*2)] = (0.4, 0.4, 0.4, 1.0)
-                    if suggested_steps_copy[i][0] == -1.0:  # left
-                        self.colors['trade-{}'.format(i+i_steps*2)] = (0.6, 0.6, 0.6, 1.0)
-                    if suggested_steps_copy[i][0] == 1.0:  # right
-                        self.colors['trade-{}'.format(i+i_steps*2)] = (0.8, 0.8, 0.8, 1.0)
-                    suggested_steps_copy[i] = suggested_steps_copy[i][2:]
-                else:
-                    self.colors['trade-{}'.format(i+i_steps*2)] = (1.0, 1.0, 1.0, 0.0)
         return observations
 
     def render(self, mode='human', close=False, info_values=None, agent_id=None, video=False):
@@ -639,7 +619,7 @@ class Smartfactory(gym.Env):
                             display_objects['task-{}'.format(t)][1].color = self.colors['machine-{}'.format(task)]
                     # else:
 
-                if self.trading != 0 and self.trading_steps != 0:
+                if self.trading_steps > 0:
                     render_trade = True
                     for i in range(self.nb_agents):
                         if self.agents[i].done:

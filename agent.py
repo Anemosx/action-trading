@@ -552,7 +552,7 @@ def fit_n_agents_n_step_trading(env,
             observations, r, done, info = env.step(actions)
             observations = deepcopy(observations)
 
-            if trade.n_trade_steps > 0:
+            if trade.n_trade_steps > 0 and not done:
                 for i in range(len(agents)):
                     if agents[i].processor is not None:
                         observations[i] = agents[i].processor.process_observation(observations[i])
@@ -584,7 +584,7 @@ def fit_n_agents_n_step_trading(env,
             for i, agent in enumerate(agents):
                 agent.step += 1
                 episode_rewards[i] += r[i]
-                if trade.n_trade_steps > 0:
+                if trade.n_trade_steps > 0 and not done:
                     trade_count[i] += new_trades[i]
                     accumulated_transfer[i] += act_transfer[i]
 
