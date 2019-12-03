@@ -1,5 +1,4 @@
 import os
-from copy import deepcopy
 from dotmap import DotMap
 from agent import build_agent, fit_n_agents_n_step_contracting, test_n_agents_n_step_contracting, fit_n_agents_n_step_trading
 from envs.smartfactory import Smartfactory
@@ -29,6 +28,7 @@ def train(setting):
 
     neptune.init('kyrillschmid/contracting-agents',
                  api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzNTQ1ZWQwYy0zNzZiLTRmMmMtYmY0Ny0zN2MxYWQ2NDcyYzEifQ==')
+
 
     with neptune.create_experiment(name='contracting-agents',
                                    params=params_json):
@@ -80,6 +80,7 @@ def train(setting):
 
         contract = Contract(policy_net=policy_net,
                             valuation_nets=valuation_nets,
+                            gamma=params.gamma,
                             contracting_target_update=params.contracting_target_update,
                             nb_contracting_steps=params.nb_contracting_steps,
                             mark_up=params.mark_up,
@@ -88,13 +89,14 @@ def train(setting):
         fit_n_agents_n_step_contracting(env,
                                         agents=agents,
                                         nb_steps=params.nb_steps,
-                                        nb_max_episode_steps=500,
+                                        nb_max_episode_steps=params.nb_max_episode_steps,
                                         logger=neptune,
                                         log_dir=run_dir,
                                         contract=contract)
 
         for i_agent, agent in enumerate(agents):
             agent.save_weights(os.path.join(run_dir, 'dqn_weights-agent-{}.h5f'.format(i_agent)), overwrite=True)
+
 
 def train_trade():
     with open('params.json', 'r') as f:
@@ -195,4 +197,8 @@ def train_trade():
 
 
 if __name__ == '__main__':
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument("setting", help="Choose the setting, i.e., 0-number_settings", metavar="SETTING", type=int)
+    # args = parser.parse_args()
+    # train(args.setting)
     train_trade()

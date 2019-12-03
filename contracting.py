@@ -7,13 +7,14 @@ from agent import build_agent
 from dotmap import DotMap
 import json
 import common_utils.drawing_util as drawing_util
-
+import agents.pytorch_agents as pta
 
 class Contract:
 
     def __init__(self,
                  policy_net,
                  valuation_nets,
+                 gamma,
                  contracting_target_update=0,
                  nb_contracting_steps=10,
                  mark_up=1.0,
@@ -21,6 +22,7 @@ class Contract:
 
         self.policy_net = policy_net
         self.valuation_nets = valuation_nets
+        self.gamma = gamma
         self.contracting_target_update = contracting_target_update
         self.nb_contracting_steps = nb_contracting_steps
         self.mark_up = mark_up
@@ -34,69 +36,71 @@ class Contract:
 
             observations, r, done, info = env.step(actions)
 
-            observations = deepcopy(observations)
-            for i in range(2):
-                if self.policy_net.processor is not None:
-                    observations[i] = self.policy_net.processor.process_observation(observations[i])
-
+            info['contracting'] =  0
             return observations, r, done, info
 
         else:
 
-            rewards = np.zeros(2)
+            pos_rewards_a0 = np.zeros((self.nb_contracting_steps))
+            pos_rewards_a1 = np.zeros((self.nb_contracting_steps))
+
+            neg_rewards_a0 = np.zeros((self.nb_contracting_steps))
+            neg_rewards_a1 = np.zeros((self.nb_contracting_steps))
+
+            compensations = np.zeros(self.nb_contracting_steps)
+
             done = False
             info = None
-
             priorities = env.priorities
-
-            if priorities[0]:
-                # high prio
-                q_vals_a1 = self.valuation_nets[1].compute_q_values(observations[0])
-            else:
-                # low prio
-                q_vals_a1 = self.valuation_nets[0].compute_q_values(observations[0])
-
-            if priorities[1]:
-                # high prio
-                q_vals_a2 = self.valuation_nets[1].compute_q_values(observations[1])
-            else:
-                # low prio
-                q_vals_a2 = self.valuation_nets[0].compute_q_values(observations[1])
-
-            q_vals = [q_vals_a1, q_vals_a2]
-
-            for i_agent in range(2):
-                if not greedy[i_agent]:
-                    transfer = np.maximum(np.max(q_vals[i_agent]), 0) * self.mark_up
-                    env.agents[(i_agent + 1) % 2].episode_debts += transfer
 
             for c_step in range(self.nb_contracting_steps):
 
                 c_actions = []
                 for i_agent in range(2):
                     if greedy[i_agent]:
-                        c_actions.append(self.policy_net.forward(observations[i_agent]))
+                        c_actions.append(self.policy_net.policy(observations[i_agent]))
                     else:
-                        # TODO: argmin for next q_values should be taken
-                        c_actions.append(np.argmin(q_vals[i_agent]))
+                        q_vals = self.valuation_nets[priorities[i_agent]].compute_q_values(observations[i_agent])
+                        c_actions.append(np.argmin(q_vals))
+                        c_t = np.maximum(np.max(q_vals) - np.min(q_vals), 0)
+                        compensations[c_step] = c_t
 
                 observations, r, done, info = env.step(c_actions)
 
-                observations = deepcopy(observations)
-                for i in range(2):
-                    if self.policy_net.processor is not None:
-                        observations[i] = self.policy_net.processor.process_observation(observations[i])
-
-                r, transfer = self.get_compensated_rewards(env=env, rewards=r)
-                rewards += r
+                if r[0] >= 0:
+                    pos_rewards_a0[c_step] += r[0]
+                else:
+                    neg_rewards_a0[c_step] += r[0]
+                if r[1] >= 0:
+                    pos_rewards_a1[c_step] += r[1]
+                else:
+                    neg_rewards_a1[c_step] += r[1]
 
                 if any([agent.done for agent in env.agents]):
                     break
 
+                compensations *= 1 / self.gamma
+
                 if self.render and combined_frames is not None and c_step < self.nb_contracting_steps - 1:
                     combined_frames = drawing_util.render_combined_frames(combined_frames, env, r, 1, actions)
 
-            return observations, rewards, done, info
+            r = [0, 0]
+            accumulated_compensation = np.sum(compensations)
+            if greedy[0]:
+
+                transfer = np.minimum(np.sum(pos_rewards_a0), accumulated_compensation )
+                r[0] += np.sum(pos_rewards_a0) + np.sum(neg_rewards_a0) - transfer
+                r[1] += np.sum(pos_rewards_a1) + np.sum(neg_rewards_a1) + transfer
+            elif greedy[1]:
+                transfer = np.minimum(np.sum(pos_rewards_a1), accumulated_compensation)
+                r[0] += np.sum(pos_rewards_a0) + np.sum(neg_rewards_a0) + transfer
+                r[1] += np.sum(pos_rewards_a1) + np.sum(neg_rewards_a1) - transfer
+
+            info['contracting'] = 1
+            return observations, r, done, info
+
+    def get_q_vals(self, observation, task_prio):
+        return self.valuation_nets[task_prio].compute_q_values(observation)
 
     def get_compensated_rewards(self, env, rewards):
 
@@ -137,8 +141,7 @@ def main():
         params_json = json.load(f)
     params = DotMap(params_json)
 
-    c = 2
-    policy_random = False
+    policy_random = True
     episodes = 10
     episode_steps = 100
 
@@ -148,53 +151,53 @@ def main():
                        rewards=params.rewards,
                        step_penalties=params.step_penalties,
                        priorities=params.priorities,
-                       contracting=c,
+                       contracting=params.contracting,
                        nb_machine_types=params.nb_machine_types,
-                       nb_tasks=params.nb_tasks
+                       nb_tasks=params.nb_tasks,
+                       observation=1
                        )
 
-    processor = env.SmartfactoryProcessor()
+    observation_shape = list(env.observation_space.shape)
+    number_of_actions = env.action_space.n
 
-    policy_net = build_agent(params=params, nb_actions=4, processor=processor)
-    policy_net.load_weights('experiments/20191105-20-36-43/run-0/contracting-0/dqn_weights-agent-0.h5f')
-
-    valuation_net_low_prio = build_agent(params=params, nb_actions=4, processor=processor)
-    valuation_net_low_prio.load_weights('experiments/20191106-11-32-13/run-0/contracting-0/dqn_weights-agent-0.h5f')
-
-    valuation_net_high_prio = build_agent(params=params, nb_actions=4, processor=processor)
-    valuation_net_high_prio.load_weights('experiments/20191106-11-30-59/run-0/contracting-0/dqn_weights-agent-0.h5f')
-
-    valuation_nets = [valuation_net_low_prio, valuation_net_high_prio]
+    policy_net = None
+    if params.contracting > 0:
+        policy_net = pta.DqnAgent(
+            observation_shape=observation_shape,
+            number_of_actions=4,
+            gamma=0.95,
+            epsilon_decay=0.00002,
+            epsilon_min=0.0,
+            mini_batch_size=64,
+            warm_up_duration=1000,
+            buffer_capacity=20000,
+            target_update_period=2000,
+            seed=1337)
+        policy_net.epsilon = 0.01
+        policy_net.load_weights('/Users/kyrill/Documents/research/contracting-agents/-weights.0.pth')
 
     contract = Contract(policy_net=policy_net,
-                        valuation_nets=valuation_nets,
+                        valuation_nets=[policy_net, policy_net],
                         contracting_target_update=params.contracting_target_update,
+                        gamma=params.gamma,
                         nb_contracting_steps=params.nb_contracting_steps,
                         mark_up=params.mark_up,
-                        render=False)
-
-    agents = []
-    for i_agent in range(params.nb_agents):
-        agent = build_agent(params=params, nb_actions=env.nb_contracting_actions, processor=processor)
-        agents.append(agent)
-        agents[i_agent].load_weights('experiments/20191106-20-02-55/run-0/contracting-2/dqn_weights-agent-{}.h5f'.format(i_agent))
+                        render=True)
 
     combined_frames = []
     for i_episode in range(episodes):
 
         observations = env.reset()
         observations = deepcopy(observations)
-        for i, agent in enumerate(agents):
-            if agent.processor is not None:
-                observations[i] = agent.processor.process_observation(observations[i])
-
         episode_rewards = np.zeros(params.nb_agents)
+        episode_contracts = 0
+
         combined_frames = drawing_util.render_combined_frames(combined_frames, env, [0, 0], 0, [0, 0])
 
         for i_step in range(episode_steps):
 
             actions = []
-            for i_ag, agent in enumerate(agents):
+            for i_ag, agent in enumerate([0, 1]):
                 if not env.agents[i_ag].done:
                     if not policy_random:
                         actions.append(agent.forward(observations[i_ag]))
@@ -204,17 +207,19 @@ def main():
                     actions.append(0)
 
             observations, r, done, info = contract.contracting_n_steps(env, observations, actions, combined_frames)
-            observations = deepcopy(observations)
-            r, transfer = contract.get_compensated_rewards(env=env, rewards=r)
+
+
+            episode_contracts += info['contracting']
+            # TODO: Abdisskontieren
             episode_rewards += r
 
-            qvals = []
-            qvals.append(agents[0].compute_q_values(observations[0]))
-            qvals.append(agents[1].compute_q_values(observations[1]))
-            combined_frames = drawing_util.render_combined_frames(combined_frames, env, r, 0, actions, qvals=qvals)
 
-            if done: #any([agent.done for agent in env.agents]):
+            combined_frames = drawing_util.render_combined_frames(combined_frames, env, r, 0, actions)
+
+            if all([agent.done for agent in env.agents]):
                 break
+
+        print("Episode {} contracts: {}".format(i_episode, episode_contracts))
 
     export_video('Smart-Factory-Contracting.mp4', combined_frames, None)
 

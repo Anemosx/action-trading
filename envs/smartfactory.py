@@ -17,7 +17,8 @@ import itertools as it
 import json
 import os
 import scipy
-
+from dotmap import DotMap
+import agents.pytorch_agents as pta
 
 
 INPUT_SHAPE = (84, 84, 1)
@@ -59,7 +60,7 @@ class Agent:
             index_machine = self.env.goal_positions.index([x, y])
             machine = self.env.goals[index_machine]
             if machine.typ in self.task and machine.inactive <= 0:
-                machine.inactive = 10
+                machine.inactive = self.env.nb_steps_machine_inactive
                 index_task = self.task.index(machine.typ)
                 self.task[index_task] = -1
                 task_index = index_task
@@ -79,7 +80,7 @@ class Agent:
 
             if machine.typ == self.task[0] and machine.inactive <= 0:
                 # index_task = self.task.index(machine.typ)
-                machine.inactive = 10
+                machine.inactive = self.env.nb_steps_machine_inactive
                 del self.task[0]
                 task_index = 0
 
@@ -179,13 +180,19 @@ class Smartfactory(gym.Env):
                  trading_signals=None,
                  contracting=0,
                  nb_machine_types=2,
-                 nb_tasks=3):
+                 nb_steps_machine_inactive=10,
+                 nb_tasks=3,
+                 observation=0):
         """
 
         :rtype: observation
         """
         self.world = Box2D.b2World(gravity=(0, 0))
-        self.observation_space = gym.spaces.Box(0.0, 1.1, shape=(84, 84, 3))
+        if observation == 0:
+            self.observation_space = gym.spaces.Box(0.0, 1.1, shape=(84, 84, 1))
+        elif observation == 1:
+            self.observation_space = gym.spaces.Box(0.0, 1.1, shape=(8, field_width, field_height))
+
         self.velocity_iterations = 6
         self.position_iterations = 2
         self.dt = 1.0 / 15
@@ -207,7 +214,7 @@ class Smartfactory(gym.Env):
             'debt_balance': (0.6078431372549019, 0.34901960784313724, 0.7137254901960784)
         }
 
-        with open(os.path.join(os.getcwd(), 'envs/actions.json'), 'r') as f:
+        with open('envs/actions.json', 'r') as f:
             actions_json = json.load(f)
 
         self.actions = []
@@ -223,16 +230,17 @@ class Smartfactory(gym.Env):
         self.trading_steps = trading_steps
         self.trading_signals = trading_signals
 
-        if trading_actions is not None:
-            self.actions = trading_actions
-        else:
-            self.actions = actions_json['no_trading_action']
+        # if trading_actions is not None:
+        #     self.actions = trading_actions
+        # else:
+        #     self.actions = actions_json['no_trading_action']
 
         self.actions_log = []
         self.trade_positions = []
 
         self.learning = learning
         self.nb_actions = len(self.actions)
+        self.action_space =  gym.spaces.Discrete(self.nb_actions)
         self.nb_contracting_actions = len(self.actions)
         self.action_space = gym.spaces.Discrete(n=len(self.actions))
 
@@ -269,6 +277,7 @@ class Smartfactory(gym.Env):
         self.contract = False
 
         self.nb_machine_types = nb_machine_types
+        self.nb_steps_machine_inactive = nb_steps_machine_inactive
         self.nb_tasks = nb_tasks
         self.priorities = []
         self.debt_balances = []
@@ -295,6 +304,7 @@ class Smartfactory(gym.Env):
                                                                    color=self.colors['field']))
 
     def reset(self):
+        self.world = Box2D.b2World(gravity=(0, 0))
         self.display_objects = dict()
         self.agents = []
         self.market_agents = []
@@ -306,6 +316,12 @@ class Smartfactory(gym.Env):
                                     (self.field_height/2)-row] for row in range(self.field_height)
                                    for column in range(self.field_width)]
 
+        np_indices = [(x + (self.field_width - (self.field_width / 2) - 1),
+                       y + (self.field_height - (self.field_height / 2) - 1)) for x, y in self.possible_positions]
+
+        self.map = {'{}-{}'.format(pp[0],pp[1]): index for pp, index in zip(self.possible_positions, np_indices)}
+
+
         field_indices = [pos for pos in range(self.field_width*self.field_height)]
         wall_indices = []
         goal_indices = [0, self.field_width-1, (self.field_width*self.field_height) - self.field_width]
@@ -316,7 +332,12 @@ class Smartfactory(gym.Env):
 
         tasks = [list(np.random.randint(0, self.nb_machine_types, self.nb_tasks)),
                  list(np.random.randint(0, self.nb_machine_types, self.nb_tasks))]
-        machine_types = [0, 1, 0, 1, 0]
+        self.machine_types = [0, 1, 0]
+
+        machines = [(m_pos, m_typ) for m_pos, m_typ in zip(self.goal_positions, self.machine_types)]
+        machines_pos_typ_0 = [machine[0] for machine in machines if machine[1] == 0]
+        machines_pos_typ_1 = [machine[0] for machine in machines if machine[1] == 1]
+        self.machines = [machines_pos_typ_0, machines_pos_typ_1]
 
         if np.sum(self.priorities) == 1:
             self.priorities = np.random.choice([0, 1], 2, replace=False)
@@ -367,7 +388,7 @@ class Smartfactory(gym.Env):
             self.goals.append(GridCell(env=self,
                                        index=i,
                                        position=goal_pos,
-                                       typ=machine_types[i]))
+                                       typ=self.machine_types[i]))
             drawing_util.add_polygon_at_pos(self.display_objects,
                                             position=(goal_pos[0], goal_pos[1]),
                                             vertices=self.agents[0].agent_vertices,
@@ -451,6 +472,7 @@ class Smartfactory(gym.Env):
             self.set_log(i, actions[agent.index])
             if not agent.done:
                 self.set_position(agent, actions[agent.index])
+
                 if self.priorities[i]:
                     rewards[i] -= self.step_penalties[0]
                 else:
@@ -473,7 +495,25 @@ class Smartfactory(gym.Env):
         if np.sum([int(agent.done) for agent in self.agents]) == len(self.agents):
             done = True
 
-        return self.observation, rewards, done, info
+        return self.observation, rewards, [agent.done for agent in self.agents], info
+
+    @property
+    def observation(self):
+        """
+        OpenAI Gym Observation
+        :return:
+            List of observations
+        """
+        observations = []
+        for i_agent, agent in enumerate(self.agents):
+            if self.observation_space.shape == (84, 84, 1):
+                observation = self.render(mode='rgb_array', agent_id=i_agent)
+                observations.append(observation)
+            elif self.observation_space.shape == (8, self.field_height, self.field_height):
+                observation = self.observation_one_hot(i_agent)
+                observations.append(observation)
+
+        return observations
 
     def set_position(self, agent, action):
 
@@ -639,10 +679,10 @@ class Smartfactory(gym.Env):
                                     display_objects['trade-{}'.format(i_agents)][1].color = self.colors[
                                         'trade-{}'.format(i_agents)]
 
-                if np.sum(self.greedy) > 0:
-                    i = self.greedy.index(0)
-                    if i == agent_id:
-                            display_objects['field'][1].color = self.colors['dark']
+                #if np.sum(self.greedy) > 0:
+                #    i = self.greedy.index(0)
+                #    if i == agent_id:
+                #            display_objects['field'][1].color = self.colors['dark']
 
                 for i_agent, agent in enumerate(self.agents):
                     if i_agent != agent_id:
@@ -657,19 +697,56 @@ class Smartfactory(gym.Env):
                                        info_values,
                                        pixels_per_worldunit=self.pixels_per_worldunit)
 
-    @property
-    def observation(self):
-        """
-        OpenAI Gym Observation
-        :return:
-            List of observations
-        """
-        observations = []
-        for i_agent, agent in enumerate(self.agents):
-            observation = self.render(mode='rgb_array', agent_id=i_agent)
-            observations.append(observation)
+    def observation_one_hot(self, agent_id):
 
-        return observations
+        channels = 8
+        observation = np.zeros((channels, self.field_width, self.field_height))
+
+        c_active_machines = 0
+        c_pos_self = 1
+        c_task_prio = 2
+        c_tasks = [3, 4, 5]
+
+        c_pos_other = 6
+        c_task_0_other = 7
+
+        for g in self.goals:
+            x_m = int(self.map['{}-{}'.format(g.position[0], g.position[1])][0])
+            y_m = int(self.map['{}-{}'.format(g.position[0], g.position[1])][1])
+
+            if g.inactive <= 0:
+                observation[c_active_machines][x_m][y_m] += 1
+
+        x_a_raw = self.agents[agent_id].body.transform.position.x
+        y_a_raw = self.agents[agent_id].body.transform.position.y
+        x_a = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][0])
+        y_a = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][1])
+        observation[c_pos_self][x_a][y_a] += 1
+
+        for i_task, task in enumerate(self.agents[agent_id].task):
+            for x_task_raw, y_task_raw in self.machines[task]:
+                x_task = int(self.map['{}-{}'.format(x_task_raw, y_task_raw)][0])
+                y_task = int(self.map['{}-{}'.format(x_task_raw, y_task_raw)][1])
+
+                observation[c_tasks[i_task]][x_task][y_task] += 1
+
+        # other agent
+        if len(self.agents) > 1:
+            x_a_raw = self.agents[(agent_id + 1) % 2].body.transform.position.x
+            y_a_raw = self.agents[(agent_id + 1) % 2].body.transform.position.y
+            x_a = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][0])
+            y_a = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][1])
+            observation[c_pos_other][x_a][y_a] += 1
+
+            if len(self.agents[(agent_id + 1) % 2].task) > 0:
+                for x_task_other_raw, y_task_other_raw in self.machines[self.agents[(agent_id + 1) % 2].task[0]]:
+                    x_task_other = int(self.map['{}-{}'.format(x_task_other_raw, y_task_other_raw)][0])
+                    y_task_other = int(self.map['{}-{}'.format(x_task_other_raw, y_task_other_raw)][1])
+                    observation[c_task_0_other][x_task_other][y_task_other] += 1
+
+        observation[c_task_prio] += self.priorities[agent_id]
+
+        return observation
 
     @staticmethod
     def overlaps_checkpoint(checkpoint, agent):
@@ -695,54 +772,79 @@ class Smartfactory(gym.Env):
 
 
 def main():
-    nb_agents = 2
-    nb_machine_types = 2
-    nb_tasks = 3
-    field_with = field_height = 5
 
-    env = Smartfactory(nb_agents=nb_agents,
-                       field_width=field_with,
-                       field_height=field_height,
-                       rewards=[1, 5],
-                       step_penalties=[0.1, 0.01],
-                       priorities=[1, 0],
-                       nb_machine_types=nb_machine_types,
-                       nb_tasks=nb_tasks)
-    episodes = 1
+    with open(os.path.join('..', 'params.json'), 'r') as f:
+        params_json = json.load(f)
+    params = DotMap(params_json)
+
+    policy_random = False
+    episodes = 10
+    episode_steps = 100
+
+    env = Smartfactory(nb_agents=params.nb_agents,
+                       field_width=params.field_width,
+                       field_height=params.field_height,
+                       rewards=params.rewards,
+                       step_penalties=params.step_penalties,
+                       priorities=params.priorities,
+                       contracting=2,
+                       nb_machine_types=params.nb_machine_types,
+                       nb_tasks=params.nb_tasks,
+                       observation=1
+                       )
+
+    observation_shape = list(env.observation_space.shape)
+    number_of_actions = env.action_space.n
+
+    agents = []
+    for i_ag in range(params.nb_agents):
+        ag = pta.DqnAgent(
+            observation_shape=observation_shape,
+            number_of_actions=number_of_actions,
+            gamma=0.95,
+            epsilon_decay=0.00002,
+            epsilon_min=0.0,
+            mini_batch_size=64,
+            warm_up_duration=1000,
+            buffer_capacity=20000,
+            target_update_period=2000,
+            seed=1337)
+        ag.epsilon = 0.01
+        agents.append(ag)
+
+    for i_agent, agent in enumerate(agents):
+        agent.load_weights('/Users/kyrill/Documents/research/contracting-agents/weights.{}.pth'.format(i_agent))
+
+    episodes = 10
     episode_steps = 100
     combined_frames = []
-
     for i_episode in range(episodes):
 
         observations = env.reset()
-        info_values = [{'reward': 0.0,
-                        'action': -1} for _ in range(env.nb_agents)]
+        episode_rewards = np.zeros(params.nb_agents)
+        episode_contracts = 0
+        combined_frames = drawing_util.render_combined_frames(combined_frames, env, [0, 0], 0, [0, 0])
 
-        combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values, 0, observations)
-
-        for i_step in range(1, episode_steps):
-
+        for i_step in range(episode_steps):
             actions = []
-            for i_agent in range(env.nb_agents):
-                actions.append(np.random.randint(0, env.nb_actions))
+            for i_ag, agent in enumerate(agents):
+                if not env.agents[i_ag].done:
+                    action = agents[i_ag].policy(observations[i_ag])
+                    actions.append(action)
+                else:
+                    actions.append(0)
 
-            observations, rewards, done, _ = env.step(actions=actions)
+            observations, r, done, info = env.step(actions)
+            episode_rewards += r
 
-            for i_ag in range(env.nb_agents):
-                scipy.misc.toimage(observations[i_ag], cmin=0.0, cmax=...).save(
-                    'observations/new-outfile-{}-ag-{}.jpg'.format(i_step, i_ag))
+            combined_frames = drawing_util.render_combined_frames(combined_frames, env, r, 0, actions)
 
-
-            for i, agent in enumerate(env.agents):
-                info_values[i]['reward'] = rewards[i]
-                info_values[i]['action'] = actions[i]
-
-            combined_frames = drawing_util.render_combined_frames(combined_frames, env, info_values, 0, observations)
-
-            if done:
+            if all([agent.done for agent in env.agents]):
                 break
 
-    export_video('Smart-Factory.mp4', combined_frames, None)
+        print("Episode {} contracts: {}".format(i_episode, episode_contracts))
+        print(episode_rewards)
+    export_video('Smart-Factory-Contracting.mp4', combined_frames, None)
 
 if __name__ == '__main__':
     main()

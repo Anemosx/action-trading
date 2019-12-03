@@ -1,5 +1,6 @@
 from collections import namedtuple
 from copy import copy
+from copy import deepcopy
 
 import gizeh
 import numpy as np
@@ -9,6 +10,8 @@ import scipy
 
 DummyBody = namedtuple('DummyBody', 'position angle')
 
+SURFACE = gizeh.Surface(int(np.ceil(240 / 10)) * 10,
+                        int(np.ceil(240 / 10)) * 10, (0.3, 0.3, 0.3) + (1.,))
 
 def add_polygons(display_objects, body, name, drawing_layer, color):
     for i, fixture in enumerate(body.fixtures):
@@ -202,10 +205,10 @@ def render_visual_state(state, info_values, pixels_per_worldunit, bg_color=(0.3,
     width, height = state['camera'].get_img_dims(pixels_per_worldunit)
 
     # Ensure that output image has dimensions as a multiple of 10 (video player compatibility)
-    surface = gizeh.Surface(int(np.ceil(width/10))*10,
-                            int(np.ceil(height/10))*10, bg_color + (1.,))
+    surface = gizeh.Surface(int(np.ceil(width / 10)) * 10, int(np.ceil(height / 10)) * 10, bg_color + (1.,))
 
     # The elements of state['display_objects'] have the drawing order as their first entry
+    # TODO: this is responsible for 3/4 of needed rendering time
     for _, display_object in sorted(state['display_objects'].values(), key=lambda t: t[0]):
         display_object.draw(surface, state['camera'], pixels_per_worldunit)
 
@@ -260,6 +263,7 @@ def render_visual_state(state, info_values, pixels_per_worldunit, bg_color=(0.3,
                     j += 1
                     text.draw(surface)
             keys.append(key)
+    # TODO: this needs 1/6
     img = surface.get_npimage()
     return img
 
