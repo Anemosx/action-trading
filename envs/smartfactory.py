@@ -219,21 +219,21 @@ class Smartfactory(gym.Env):
 
         self.actions = []
         self.contracting = contracting
-        if contracting == 0:
-            self.actions = actions_json['no_contracting_action']
-        if contracting == 1:
-            self.actions = actions_json['one_contracting_action']
-        if contracting == 2:
-            self.actions = actions_json['two_contracting_actions']
+        # if contracting == 0:
+        #     self.actions = actions_json['no_contracting_action']
+        # if contracting == 1:
+        #     self.actions = actions_json['one_contracting_action']
+        # if contracting == 2:
+        #     self.actions = actions_json['two_contracting_actions']
 
         self.trading = trading
         self.trading_steps = trading_steps
         self.trading_signals = trading_signals
 
-        # if trading_actions is not None:
-        #     self.actions = trading_actions
-        # else:
-        #     self.actions = actions_json['no_trading_action']
+        if trading_actions is not None:
+            self.actions = trading_actions
+        else:
+            self.actions = actions_json['no_trading_action']
 
         self.actions_log = []
         self.trade_positions = []

@@ -7,6 +7,7 @@ import json
 import neptune
 from datetime import datetime
 from contracting import Contract
+import trading
 
 
 def main():
@@ -16,18 +17,25 @@ def main():
     params = DotMap(params_json)
 
     if params.logging:
-        neptune.init('kyrillschmid/contracting-agents',
-                     api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzNTQ1ZWQwYy0zNzZiLTRmMmMtYmY0Ny0zN2MxYWQ2NDcyYzEifQ==')
+        # neptune.init('kyrillschmid/contracting-agents',
+        #              api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzNTQ1ZWQwYy0zNzZiLTRmMmMtYmY0Ny0zN2MxYWQ2NDcyYzEifQ==')
+
+        neptune.init('arno/trading-agents',
+                     api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzMDc2ZmU2YS1lYWFkLTQwNjUtOTgyMS00OTczMGU4NDYzNzcifQ==')
+
+        # neptune.init('Trading-Agents/Trading-Agents',
+        #              api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzMDc2ZmU2YS1lYWFkLTQwNjUtOTgyMS00OTczMGU4NDYzNzcifQ==')
+
         logger = neptune
         with neptune.create_experiment(name='contracting-agents',
                                        params=params_json):
 
             exp_time = datetime.now().strftime('%Y%m%d-%H-%M-%S')
-            neptune.append_tag('pytorch-{}-contracting-{}-'.format(exp_time, params.contracting))
-            run_experiment(params, logger)
+            neptune.append_tag('pytorch-{}-trading-{}-'.format(exp_time, params.trading))
+            run_trade_experiment(params, logger)
     else:
         logger = None
-        run_experiment(params, logger)
+        run_trade_experiment(params, logger)
 
 
 def run_experiment(params, logger):
@@ -99,6 +107,121 @@ def run_experiment(params, logger):
             agent.epsilon = agent.epsilon_min  # only for dqn_agent
         pytorch_evaluation.evaluate(agents, env, 100, 100, 'id', False, True, False, logger)
 
+
+def run_trade_experiment(params, logger):
+
+    TRAIN = True
+
+    action_space = trading.setup_action_space(params.trading_steps, params.trading_steps, None)
+
+    env = Smartfactory(nb_agents=params.nb_agents,
+                       field_width=params.field_width,
+                       field_height=params.field_height,
+                       rewards=params.rewards,
+                       step_penalties=params.step_penalties,
+                       trading=params.trading,
+                       trading_steps=params.trading_steps,
+                       trading_actions=action_space,
+                       priorities=params.priorities,
+                       nb_machine_types=params.nb_machine_types,
+                       nb_steps_machine_inactive=params.nb_steps_machine_inactive,
+                       nb_tasks=params.nb_tasks,
+                       observation=1
+                       )
+
+    observation_shape = list(env.observation_space.shape)
+    number_of_actions = env.action_space.n
+
+    agents = []
+    no_tr_agents = []
+    if params.trading == 2:
+        for i_ag in range(params.nb_agents):
+            ag = pta.DqnAgent(
+                observation_shape=observation_shape,
+                number_of_actions=4,
+                gamma=0.95,
+                epsilon_decay=0.00002,
+                epsilon_min=0.0,
+                mini_batch_size=64,
+                warm_up_duration=1000,
+                buffer_capacity=20000,
+                target_update_period=2000,
+                seed=1337)
+            no_tr_agents.append(ag)
+
+        for i_ag in range(params.nb_agents):
+            ag = pta.DqnAgent(
+                observation_shape=observation_shape,
+                number_of_actions=number_of_actions-4,
+                gamma=0.95,
+                epsilon_decay=0.00002,
+                epsilon_min=0.0,
+                mini_batch_size=64,
+                warm_up_duration=1000,
+                buffer_capacity=20000,
+                target_update_period=2000,
+                seed=1337)
+            agents.append(ag)
+    else:
+        for i_ag in range(params.nb_agents):
+            ag = pta.DqnAgent(
+                observation_shape=observation_shape,
+                number_of_actions=number_of_actions,
+                gamma=0.95,
+                epsilon_decay=0.00002,
+                epsilon_min=0.0,
+                mini_batch_size=64,
+                warm_up_duration=1000,
+                buffer_capacity=20000,
+                target_update_period=2000,
+                seed=1337)
+            agents.append(ag)
+
+    valuation_low_priority = pta.DqnAgent(
+        observation_shape=observation_shape,
+        number_of_actions=4,
+        gamma=0.95,
+        epsilon_decay=0.00002,
+        epsilon_min=0.0,
+        mini_batch_size=64,
+        warm_up_duration=1000,
+        buffer_capacity=20000,
+        target_update_period=2000,
+        seed=1337)
+    valuation_low_priority.epsilon = 0.01
+
+    valuation_high_priority = pta.DqnAgent(
+        observation_shape=observation_shape,
+        number_of_actions=4,
+        gamma=0.95,
+        epsilon_decay=0.00002,
+        epsilon_min=0.0,
+        mini_batch_size=64,
+        warm_up_duration=1000,
+        buffer_capacity=20000,
+        target_update_period=2000,
+        seed=1337)
+    valuation_high_priority.epsilon = 0.01
+
+    valuation_nets = [valuation_low_priority, valuation_high_priority]
+
+    trade = trading.Trade(valuation_nets=valuation_nets,
+                          agents=agents,
+                          n_trade_steps=params.trading_steps,
+                          mark_up=params.mark_up,
+                          pay_up_front=params.pay_up_front,
+                          trading_budget=params.trading_budget)
+
+    if TRAIN:
+        pytorch_training.train_trading_dqn(agents, no_tr_agents, env, 1000, params.nb_max_episode_steps, "id", logger, True, trade, params.trading, params.trading_budget)
+        # pytorch_training.train_dqn(agents, env, 1000, params.nb_max_episode_steps, "id", logger, True, contract)
+        for i_agent, agent in enumerate(agents):
+            ag.save_weights("weights.{}.pth".format(i_agent))
+    else:
+        for i_agent, agent in enumerate(agents):
+            agent.load_weights("weights.{}.pth".format(i_agent))
+            agent.epsilon = agent.epsilon_min  # only for dqn_agent
+        pytorch_evaluation.evaluate(agents, env, 100, 100, 'id', False, True, False, logger)
 
 
 if __name__ == '__main__':

@@ -132,22 +132,26 @@ class Trade:
         if action[0] == 1.0:  # right
             action_index = 3
 
-        if priorities[receiver] == 0:
-            # low priority
-            if receiver == 0:
-                highest_q_value = np.max(self.valuation_nets[0].compute_q_values(observations[0]))
-                action_q_value = self.valuation_nets[0].compute_q_values(observations[0])[action_index]
-            else:
-                highest_q_value = np.max(self.valuation_nets[0].compute_q_values(observations[1]))
-                action_q_value = self.valuation_nets[0].compute_q_values(observations[1])[action_index]
-        else:
-            # high priority
-            if receiver == 0:
-                highest_q_value = np.max(self.valuation_nets[1].compute_q_values(observations[0]))
-                action_q_value = self.valuation_nets[1].compute_q_values(observations[0])[action_index]
-            else:
-                highest_q_value = np.max(self.valuation_nets[1].compute_q_values(observations[1]))
-                action_q_value = self.valuation_nets[1].compute_q_values(observations[1])[action_index]
+        valuation_q_vals = self.valuation_nets[priorities[receiver]].compute_q_values(observations[receiver])[0]
+        highest_q_value = np.max(valuation_q_vals)
+        action_q_value = valuation_q_vals[action_index]
+
+        # if priorities[receiver] == 0:
+        #     # low priority
+        #     if receiver == 0:
+        #         highest_q_value = np.max(self.valuation_nets[0].compute_q_values(observations[0]))
+        #         action_q_value = self.valuation_nets[0].compute_q_values(observations[0])[action_index]
+        #     else:
+        #         highest_q_value = np.max(self.valuation_nets[0].compute_q_values(observations[1]))
+        #         action_q_value = self.valuation_nets[0].compute_q_values(observations[1])[action_index]
+        # else:
+        #     # high priority
+        #     if receiver == 0:
+        #         highest_q_value = np.max(self.valuation_nets[1].compute_q_values(observations[0]))
+        #         action_q_value = self.valuation_nets[1].compute_q_values(observations[0])[action_index]
+        #     else:
+        #         highest_q_value = np.max(self.valuation_nets[1].compute_q_values(observations[1]))
+        #         action_q_value = self.valuation_nets[1].compute_q_values(observations[1])[action_index]
 
         compensation = (highest_q_value - action_q_value) * self.mark_up
 
