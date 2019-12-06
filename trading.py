@@ -32,7 +32,7 @@ def setup_action_space(step, trading_steps, tr_action_space):
 
 class Trade:
 
-    def __init__(self, valuation_nets, agents, n_trade_steps, mark_up, pay_up_front, trading_budget):
+    def __init__(self, valuation_nets, agents, n_trade_steps, mark_up, gamma, pay_up_front, trading_budget):
         self.agents = agents
         self.agent_count = len(agents)
         self.n_trade_steps = n_trade_steps
@@ -40,6 +40,7 @@ class Trade:
         self.pay_up_front = pay_up_front
         self.valuation_nets = valuation_nets
         self.trading_budget = trading_budget
+        self.gamma = gamma
 
     def update_trading(self, rewards, episode_rewards, env, observations, suggested_steps, transfer):
         act_transfer = np.zeros(self.agent_count)
@@ -153,7 +154,7 @@ class Trade:
         #         highest_q_value = np.max(self.valuation_nets[1].compute_q_values(observations[1]))
         #         action_q_value = self.valuation_nets[1].compute_q_values(observations[1])[action_index]
 
-        compensation = (highest_q_value - action_q_value) * self.mark_up
+        compensation = ((highest_q_value - action_q_value) * self.mark_up) / self.gamma
 
         return compensation
 

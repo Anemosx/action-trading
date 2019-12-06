@@ -153,10 +153,17 @@ def train_trading_dqn(agents, no_tr_agents, environment, training_episodes: int,
 
             trading_observations, r, joint_done, info = environment.step(actions)
 
-            joint_reward, suggested_steps, transfer, new_trades, act_transfer = trade.update_trading(r, episode_return, environment,
+            if trade.n_trade_steps > 0:
+                joint_reward, suggested_steps, transfer, new_trades, act_transfer = trade.update_trading(r, episode_return, environment,
                                                                                           trading_observations, suggested_steps,
                                                                                           transfer)
-            next_observations = environment.update_trade_colors(suggested_steps)
+                next_observations = environment.update_trade_colors(suggested_steps)
+
+            else:
+                joint_reward = r
+                new_trades = [0, 0]
+                act_transfer = [0, 0]
+                next_observations = trading_observations
 
             # buffer experience
             for agent_index in agent_indices:
@@ -176,9 +183,9 @@ def train_trading_dqn(agents, no_tr_agents, environment, training_episodes: int,
             # finish current step
             current_step += 1
             episode_steps += 1
-            episode_return += joint_reward
 
             for i in range(trade.agent_count):
+                episode_return[i] += joint_reward[i]
                 trade_count[i] += new_trades[i]
                 accumulated_transfer[i] += act_transfer[i]
 

@@ -189,6 +189,7 @@ def run_trade_experiment(params, logger):
         target_update_period=2000,
         seed=1337)
     valuation_low_priority.epsilon = 0.01
+    valuation_low_priority.load_weights('valuation_nets/low_priority.pth')
 
     valuation_high_priority = pta.DqnAgent(
         observation_shape=observation_shape,
@@ -202,6 +203,7 @@ def run_trade_experiment(params, logger):
         target_update_period=2000,
         seed=1337)
     valuation_high_priority.epsilon = 0.01
+    valuation_high_priority.load_weights('valuation_nets/high_priority.pth')
 
     valuation_nets = [valuation_low_priority, valuation_high_priority]
 
@@ -209,12 +211,12 @@ def run_trade_experiment(params, logger):
                           agents=agents,
                           n_trade_steps=params.trading_steps,
                           mark_up=params.mark_up,
+                          gamma=params.gamma,
                           pay_up_front=params.pay_up_front,
                           trading_budget=params.trading_budget)
 
     if TRAIN:
         pytorch_training.train_trading_dqn(agents, no_tr_agents, env, 1000, params.nb_max_episode_steps, "id", logger, True, trade, params.trading, params.trading_budget)
-        # pytorch_training.train_dqn(agents, env, 1000, params.nb_max_episode_steps, "id", logger, True, contract)
         for i_agent, agent in enumerate(agents):
             ag.save_weights("weights.{}.pth".format(i_agent))
     else:
