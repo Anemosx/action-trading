@@ -114,8 +114,9 @@ def train_dqn(agents, environment, training_episodes: int, steps_per_episode: in
 
     print("{} | {} | training finished".format(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), scenario_id))
 
+
 def train_trading_dqn(agents, no_tr_agents, environment, training_episodes: int, steps_per_episode: int, scenario_id: str,
-              logger, plot_training_progress: bool, trade, trading, trading_budget):
+              logger, plot_training_progress: bool, trade, trading_budget):
     print("{} | {} | training started".format(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), scenario_id))
 
     log = prepare_log(training_episodes)
@@ -128,10 +129,8 @@ def train_trading_dqn(agents, no_tr_agents, environment, training_episodes: int,
         episode_steps = 0
         episode_return = np.zeros(len(environment.agents))
         joint_done = [False, False]
-        transfer = np.zeros(len(agents))
         trade.trading_budget = deepcopy(trading_budget)
         trade_count = np.zeros(len(agents))
-        suggested_steps = [[], []]
         accumulated_transfer = np.zeros(len(agents))
 
         while not done:
@@ -139,8 +138,8 @@ def train_trading_dqn(agents, no_tr_agents, environment, training_episodes: int,
             actions = []
             for agent_index in agent_indices:
                 if not joint_done[agent_index]:
-                    if trading == 2:
-                        tr_checks = trade.check_actions(suggested_steps)
+                    if trade.trading == 2:
+                        tr_checks = trade.check_actions(trade.suggested_steps)
                         if tr_checks[agent_index]:
                             action = agents[agent_index].policy(observations[agent_index]) + 4
                         else:
@@ -151,19 +150,7 @@ def train_trading_dqn(agents, no_tr_agents, environment, training_episodes: int,
                     action = np.random.randint(0, 4)
                 actions.append(action)
 
-            trading_observations, r, joint_done, info = environment.step(actions)
-
-            if trade.n_trade_steps > 0:
-                joint_reward, suggested_steps, transfer, new_trades, act_transfer = trade.update_trading(r, episode_return, environment,
-                                                                                          trading_observations, suggested_steps,
-                                                                                          transfer)
-                next_observations = environment.update_trade_colors(suggested_steps)
-
-            else:
-                joint_reward = r
-                new_trades = [0, 0]
-                act_transfer = [0, 0]
-                next_observations = trading_observations
+            joint_reward, next_observations, joint_done, info = trade.trading_step(episode_return, environment, actions)
 
             # buffer experience
             for agent_index in agent_indices:
@@ -186,8 +173,9 @@ def train_trading_dqn(agents, no_tr_agents, environment, training_episodes: int,
 
             for i in range(trade.agent_count):
                 episode_return[i] += joint_reward[i]
-                trade_count[i] += new_trades[i]
-                accumulated_transfer[i] += act_transfer[i]
+                if trade.n_trade_steps > 0 and trade.trading > 0:
+                    trade_count[i] += info['new_trades_{}'.format(i)]
+                    accumulated_transfer[i] += info['act_transfer_{}'.format(i)]
 
             done = all(done is True for done in joint_done) or current_step == steps_per_episode
 
@@ -213,12 +201,11 @@ def train_trading_dqn(agents, no_tr_agents, environment, training_episodes: int,
     #if log_training_progress:
     #    data.save_csv("results/{}.csv".format(scenario_id), log)
 
-    if plot_training_progress:
-        plot_score(data_frame=pd.DataFrame(log), window_size=25)
-        plot_violations(data_frame=pd.DataFrame(log), window_size=50)
+    # if plot_training_progress:
+    #     plot_score(data_frame=pd.DataFrame(log), window_size=25)
+    #     plot_violations(data_frame=pd.DataFrame(log), window_size=50)
 
     print("{} | {} | training finished".format(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), scenario_id))
-
 
 
 def prepare_log(training_episodes: int):

@@ -230,10 +230,7 @@ class Smartfactory(gym.Env):
         self.trading_steps = trading_steps
         self.trading_signals = trading_signals
 
-        if trading_actions is not None:
-            self.actions = trading_actions
-        else:
-            self.actions = actions_json['no_trading_action']
+        self.actions = trading_actions
 
         self.actions_log = []
         self.trade_positions = []
@@ -659,7 +656,7 @@ class Smartfactory(gym.Env):
                             display_objects['task-{}'.format(t)][1].color = self.colors['machine-{}'.format(task)]
                     # else:
 
-                if self.trading_steps > 0:
+                if self.trading_steps > 0 and self.trading > 0:
                     render_trade = True
                     for i in range(self.nb_agents):
                         if self.agents[i].done:

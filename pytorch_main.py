@@ -209,6 +209,7 @@ def run_trade_experiment(params, logger):
 
     trade = trading.Trade(valuation_nets=valuation_nets,
                           agents=agents,
+                          trading=params.trading,
                           n_trade_steps=params.trading_steps,
                           mark_up=params.mark_up,
                           gamma=params.gamma,
@@ -216,7 +217,7 @@ def run_trade_experiment(params, logger):
                           trading_budget=params.trading_budget)
 
     if TRAIN:
-        pytorch_training.train_trading_dqn(agents, no_tr_agents, env, 1000, params.nb_max_episode_steps, "id", logger, True, trade, params.trading, params.trading_budget)
+        pytorch_training.train_trading_dqn(agents, no_tr_agents, env, 1500, params.nb_max_episode_steps, "id", logger, False, trade, params.trading_budget)
         for i_agent, agent in enumerate(agents):
             ag.save_weights("weights.{}.pth".format(i_agent))
     else:
