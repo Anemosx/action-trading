@@ -129,7 +129,7 @@ class Trade:
 
     def check_actions(self, suggested_steps):
         tr_action_possibility = [False, False]
-        if self.n_trade_steps == 0:
+        if self.trading == 0 or self.n_trade_steps == 0:
             return tr_action_possibility
 
         for i_agent in range(self.agent_count):
@@ -177,7 +177,7 @@ def main():
                        nb_machine_types=params.nb_machine_types,
                        nb_steps_machine_inactive=params.nb_steps_machine_inactive,
                        nb_tasks=params.nb_tasks,
-                       observation=1
+                       observation=2
                        )
 
     observation_shape = list(env.observation_space.shape)
@@ -240,7 +240,7 @@ def main():
         target_update_period=2000,
         seed=1337)
     valuation_low_priority.epsilon = 0.01
-    valuation_low_priority.load_weights('valuation_nets/low_priority.pth')
+    # valuation_low_priority.load_weights('valuation_nets/low_priority.pth')
 
     valuation_high_priority = pta.DqnAgent(
         observation_shape=observation_shape,
@@ -254,7 +254,7 @@ def main():
         target_update_period=2000,
         seed=1337)
     valuation_high_priority.epsilon = 0.01
-    valuation_high_priority.load_weights('valuation_nets/high_priority.pth')
+    # valuation_high_priority.load_weights('valuation_nets/high_priority.pth')
 
     valuation_nets = [valuation_low_priority, valuation_high_priority]
 

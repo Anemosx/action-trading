@@ -192,6 +192,8 @@ class Smartfactory(gym.Env):
             self.observation_space = gym.spaces.Box(0.0, 1.1, shape=(84, 84, 1))
         elif observation == 1:
             self.observation_space = gym.spaces.Box(0.0, 1.1, shape=(8, field_width, field_height))
+        elif observation == 2:
+            self.observation_space = gym.spaces.Box(0.0, 1.1, shape=(10, field_width, field_height))
 
         self.velocity_iterations = 6
         self.position_iterations = 2
@@ -229,7 +231,7 @@ class Smartfactory(gym.Env):
         self.trading = trading
         self.trading_steps = trading_steps
         self.trading_signals = trading_signals
-
+        self.current_suggestions = [[0], [0]]
         self.actions = trading_actions
 
         self.actions_log = []
@@ -345,6 +347,7 @@ class Smartfactory(gym.Env):
         self.debt_balance_position = [(-self.field_width/2 + 3, self.field_height/2 + 2)]
         self.greedy = []
 
+        self.current_suggestions = [[], []]
         self.trade_positions = []
         if self.trading != 0 and self.trading_steps != 0:
             if self.trading_signals:
@@ -509,6 +512,9 @@ class Smartfactory(gym.Env):
             elif self.observation_space.shape == (8, self.field_height, self.field_height):
                 observation = self.observation_one_hot(i_agent)
                 observations.append(observation)
+            elif self.observation_space.shape == (10, self.field_height, self.field_height):
+                observation = self.observation_trade(i_agent)
+                observations.append(observation)
 
         return observations
 
@@ -586,7 +592,7 @@ class Smartfactory(gym.Env):
         return current_actions
 
     def update_trade_colors(self, suggested_steps):
-        observations = deepcopy(self.observation)
+        self.current_suggestions = suggested_steps
         if self.trading_signals:
             suggested_steps_copy = deepcopy(suggested_steps)
 
@@ -617,7 +623,8 @@ class Smartfactory(gym.Env):
                         self.colors['trade-{}'.format(i)] = (1.0, 1.0, 1.0, 1.0)
                 else:
                     self.colors['trade-{}'.format(i)] = (1.0, 1.0, 1.0, 0.0)
-        return observations
+
+        return self.observation
 
     def render(self, mode='human', close=False, info_values=None, agent_id=None, video=False):
         if mode == 'rgb_array':
@@ -742,6 +749,96 @@ class Smartfactory(gym.Env):
                     observation[c_task_0_other][x_task_other][y_task_other] += 1
 
         observation[c_task_prio] += self.priorities[agent_id]
+
+        return observation
+
+    def observation_trade(self, agent_id):
+
+        channels = 10
+        observation = np.zeros((channels, self.field_width, self.field_height))
+
+        c_active_machines = 0
+        c_pos_self = 1
+        c_task_prio = 2
+        c_tasks = [3, 4, 5]
+
+        c_pos_other = 6
+        c_task_0_other = 7
+
+        c_suggestions = 8
+        c_suggestions_other = 9
+
+        for g in self.goals:
+            x_m = int(self.map['{}-{}'.format(g.position[0], g.position[1])][0])
+            y_m = int(self.map['{}-{}'.format(g.position[0], g.position[1])][1])
+
+            if g.inactive <= 0:
+                observation[c_active_machines][x_m][y_m] += 1
+
+        x_a_raw = self.agents[agent_id].body.transform.position.x
+        y_a_raw = self.agents[agent_id].body.transform.position.y
+        x_a = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][0])
+        y_a = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][1])
+        observation[c_pos_self][x_a][y_a] += 1
+
+        for i_task, task in enumerate(self.agents[agent_id].task):
+            for x_task_raw, y_task_raw in self.machines[task]:
+                x_task = int(self.map['{}-{}'.format(x_task_raw, y_task_raw)][0])
+                y_task = int(self.map['{}-{}'.format(x_task_raw, y_task_raw)][1])
+
+                observation[c_tasks[i_task]][x_task][y_task] += 1
+
+        # other agent
+        if len(self.agents) > 1:
+            x_a_raw = self.agents[(agent_id + 1) % 2].body.transform.position.x
+            y_a_raw = self.agents[(agent_id + 1) % 2].body.transform.position.y
+            x_a = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][0])
+            y_a = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][1])
+            observation[c_pos_other][x_a][y_a] += 1
+
+            if len(self.agents[(agent_id + 1) % 2].task) > 0:
+                for x_task_other_raw, y_task_other_raw in self.machines[self.agents[(agent_id + 1) % 2].task[0]]:
+                    x_task_other = int(self.map['{}-{}'.format(x_task_other_raw, y_task_other_raw)][0])
+                    y_task_other = int(self.map['{}-{}'.format(x_task_other_raw, y_task_other_raw)][1])
+                    observation[c_task_0_other][x_task_other][y_task_other] += 1
+
+        observation[c_task_prio] += self.priorities[agent_id]
+
+        x_pos = self.agents[agent_id].body.transform.position.x
+        y_pos = self.agents[agent_id].body.transform.position.y
+        x_off = 0
+        y_off = 0
+
+        for i_steps in range(int(len(self.current_suggestions[agent_id])/2)):
+            x_step = int(self.current_suggestions[agent_id][i_steps * 2]) + x_off
+            y_step = int(self.current_suggestions[agent_id][i_steps * 2 + 1]) + y_off
+
+            x_sugg = int(self.map['{}-{}'.format(x_pos, y_pos)][0]) + x_step
+            y_sugg = int(self.map['{}-{}'.format(x_pos, y_pos)][1]) + y_step
+
+            x_off += x_step
+            y_off += y_step
+
+            if 0 <= x_sugg < self.field_width and 0 <= y_sugg < self.field_height:
+                observation[c_suggestions][x_sugg][y_sugg] += 1
+
+        x_pos_o = self.agents[(agent_id + 1) % 2].body.transform.position.x
+        y_pos_o = self.agents[(agent_id + 1) % 2].body.transform.position.y
+        x_off = 0
+        y_off = 0
+
+        for i_steps in range(int(len(self.current_suggestions[(agent_id + 1) % 2]) / 2)):
+            x_step = int(self.current_suggestions[(agent_id + 1) % 2][i_steps * 2]) + x_off
+            y_step = int(self.current_suggestions[(agent_id + 1) % 2][i_steps * 2 + 1]) + y_off
+
+            x_sugg_o = int(self.map['{}-{}'.format(x_pos_o, y_pos_o)][0]) + x_step
+            y_sugg_o = int(self.map['{}-{}'.format(x_pos_o, y_pos_o)][1]) + y_step
+
+            x_off += x_step
+            y_off += y_step
+
+            if 0 <= x_sugg_o < self.field_width and 0 <= y_sugg_o < self.field_height:
+                observation[c_suggestions_other][x_sugg_o][y_sugg_o] += 1
 
         return observation
 

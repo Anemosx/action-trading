@@ -112,7 +112,10 @@ def run_trade_experiment(params, logger):
 
     TRAIN = True
 
-    action_space = trading.setup_action_space(params.trading_steps, params.trading_steps, None)
+    if params.trading > 0 and params.trading_steps > 0:
+        action_space = trading.setup_action_space(params.trading_steps, params.trading_steps, None)
+    else:
+        action_space = [[0.0, 1.0], [0.0, -1.0], [-1.0, 0.0], [1.0, 0.0]]
 
     env = Smartfactory(nb_agents=params.nb_agents,
                        field_width=params.field_width,
@@ -126,7 +129,7 @@ def run_trade_experiment(params, logger):
                        nb_machine_types=params.nb_machine_types,
                        nb_steps_machine_inactive=params.nb_steps_machine_inactive,
                        nb_tasks=params.nb_tasks,
-                       observation=1
+                       observation=2
                        )
 
     observation_shape = list(env.observation_space.shape)
@@ -189,7 +192,7 @@ def run_trade_experiment(params, logger):
         target_update_period=2000,
         seed=1337)
     valuation_low_priority.epsilon = 0.01
-    valuation_low_priority.load_weights('valuation_nets/low_priority.pth')
+    # valuation_low_priority.load_weights('valuation_nets/weights.0.pth')
 
     valuation_high_priority = pta.DqnAgent(
         observation_shape=observation_shape,
@@ -203,7 +206,7 @@ def run_trade_experiment(params, logger):
         target_update_period=2000,
         seed=1337)
     valuation_high_priority.epsilon = 0.01
-    valuation_high_priority.load_weights('valuation_nets/high_priority.pth')
+    # valuation_high_priority.load_weights('valuation_nets/weights.1.pth')
 
     valuation_nets = [valuation_low_priority, valuation_high_priority]
 
@@ -217,7 +220,7 @@ def run_trade_experiment(params, logger):
                           trading_budget=params.trading_budget)
 
     if TRAIN:
-        pytorch_training.train_trading_dqn(agents, no_tr_agents, env, 1500, params.nb_max_episode_steps, "id", logger, False, trade, params.trading_budget)
+        pytorch_training.train_trading_dqn(agents, no_tr_agents, env, 1000, params.nb_max_episode_steps, "id", logger, False, trade, params.trading_budget)
         for i_agent, agent in enumerate(agents):
             ag.save_weights("weights.{}.pth".format(i_agent))
     else:
