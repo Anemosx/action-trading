@@ -65,7 +65,8 @@ class DqnAgent:
                  target_update_period: int = 1000,
                  seed: int = 42) -> None:
         torch.manual_seed(seed)
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cpu")
+        # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.gamma = gamma
         self.epsilon_decay = epsilon_decay
         self.epsilon_min = epsilon_min

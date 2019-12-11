@@ -810,17 +810,18 @@ class Smartfactory(gym.Env):
         y_off = 0
 
         for i_steps in range(int(len(self.current_suggestions[agent_id])/2)):
-            x_step = int(self.current_suggestions[agent_id][i_steps * 2]) + x_off
-            y_step = int(self.current_suggestions[agent_id][i_steps * 2 + 1]) + y_off
+            x_step = int(self.current_suggestions[agent_id][i_steps * 2])
+            y_step = int(self.current_suggestions[agent_id][i_steps * 2 + 1])
 
-            x_sugg = int(self.map['{}-{}'.format(x_pos, y_pos)][0]) + x_step
-            y_sugg = int(self.map['{}-{}'.format(x_pos, y_pos)][1]) + y_step
-
-            x_off += x_step
-            y_off += y_step
+            x_sugg = int(self.map['{}-{}'.format(x_pos, y_pos)][0]) + x_step + x_off
+            y_sugg = int(self.map['{}-{}'.format(x_pos, y_pos)][1]) + y_step + y_off
 
             if 0 <= x_sugg < self.field_width and 0 <= y_sugg < self.field_height:
                 observation[c_suggestions][x_sugg][y_sugg] += 1
+                x_off += x_step
+                y_off += y_step
+            else:
+                observation[c_suggestions][x_sugg - x_step][y_sugg - y_step] += 1
 
         x_pos_o = self.agents[(agent_id + 1) % 2].body.transform.position.x
         y_pos_o = self.agents[(agent_id + 1) % 2].body.transform.position.y
@@ -828,17 +829,18 @@ class Smartfactory(gym.Env):
         y_off = 0
 
         for i_steps in range(int(len(self.current_suggestions[(agent_id + 1) % 2]) / 2)):
-            x_step = int(self.current_suggestions[(agent_id + 1) % 2][i_steps * 2]) + x_off
-            y_step = int(self.current_suggestions[(agent_id + 1) % 2][i_steps * 2 + 1]) + y_off
+            x_step = int(self.current_suggestions[(agent_id + 1) % 2][i_steps * 2])
+            y_step = int(self.current_suggestions[(agent_id + 1) % 2][i_steps * 2 + 1])
 
-            x_sugg_o = int(self.map['{}-{}'.format(x_pos_o, y_pos_o)][0]) + x_step
-            y_sugg_o = int(self.map['{}-{}'.format(x_pos_o, y_pos_o)][1]) + y_step
-
-            x_off += x_step
-            y_off += y_step
+            x_sugg_o = int(self.map['{}-{}'.format(x_pos_o, y_pos_o)][0]) + x_step + x_off
+            y_sugg_o = int(self.map['{}-{}'.format(x_pos_o, y_pos_o)][1]) + y_step + y_off
 
             if 0 <= x_sugg_o < self.field_width and 0 <= y_sugg_o < self.field_height:
                 observation[c_suggestions_other][x_sugg_o][y_sugg_o] += 1
+                x_off += x_step
+                y_off += y_step
+            else:
+                observation[c_suggestions_other][x_sugg_o - x_step][y_sugg_o - y_step] += 1
 
         return observation
 

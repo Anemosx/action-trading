@@ -25,10 +25,10 @@
   "trading": 1,
   "trading_steps": 1,
   "trading_signals": 1,
-  "trading_budget": [10.0, 10.0],
+  "trading_budget": [100.0, 100.0],
   "pay_up_front" : 0,
   "mark_up": 1.0,
   "nb_max_episode_steps": 1000,
-  "contracting": 2,
+  "contracting": 0,
   "logging": 1
 }

@@ -125,6 +125,7 @@ def run_trade_experiment(params, logger):
                        trading=params.trading,
                        trading_steps=params.trading_steps,
                        trading_actions=action_space,
+                       trading_signals=params.trading_signals,
                        priorities=params.priorities,
                        nb_machine_types=params.nb_machine_types,
                        nb_steps_machine_inactive=params.nb_steps_machine_inactive,
@@ -192,7 +193,7 @@ def run_trade_experiment(params, logger):
         target_update_period=2000,
         seed=1337)
     valuation_low_priority.epsilon = 0.01
-    # valuation_low_priority.load_weights('valuation_nets/weights.0.pth')
+    valuation_low_priority.load_weights('valuation_nets/low_priority.pth')
 
     valuation_high_priority = pta.DqnAgent(
         observation_shape=observation_shape,
@@ -206,7 +207,7 @@ def run_trade_experiment(params, logger):
         target_update_period=2000,
         seed=1337)
     valuation_high_priority.epsilon = 0.01
-    # valuation_high_priority.load_weights('valuation_nets/weights.1.pth')
+    valuation_high_priority.load_weights('valuation_nets/high_priority.pth')
 
     valuation_nets = [valuation_low_priority, valuation_high_priority]
 
@@ -220,7 +221,7 @@ def run_trade_experiment(params, logger):
                           trading_budget=params.trading_budget)
 
     if TRAIN:
-        pytorch_training.train_trading_dqn(agents, no_tr_agents, env, 1000, params.nb_max_episode_steps, "id", logger, False, trade, params.trading_budget)
+        pytorch_training.train_trading_dqn(agents, no_tr_agents, env, 2000, params.nb_max_episode_steps, "id", logger, False, trade, params.trading_budget)
         for i_agent, agent in enumerate(agents):
             ag.save_weights("weights.{}.pth".format(i_agent))
     else:

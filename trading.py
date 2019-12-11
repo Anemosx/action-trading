@@ -173,6 +173,7 @@ def main():
                        trading=params.trading,
                        trading_steps=params.trading_steps,
                        trading_actions=action_space,
+                       trading_signals=params.trading_signals,
                        priorities=params.priorities,
                        nb_machine_types=params.nb_machine_types,
                        nb_steps_machine_inactive=params.nb_steps_machine_inactive,
@@ -240,7 +241,7 @@ def main():
         target_update_period=2000,
         seed=1337)
     valuation_low_priority.epsilon = 0.01
-    # valuation_low_priority.load_weights('valuation_nets/low_priority.pth')
+    valuation_low_priority.load_weights('valuation_nets/low_priority.pth')
 
     valuation_high_priority = pta.DqnAgent(
         observation_shape=observation_shape,
@@ -254,7 +255,7 @@ def main():
         target_update_period=2000,
         seed=1337)
     valuation_high_priority.epsilon = 0.01
-    # valuation_high_priority.load_weights('valuation_nets/high_priority.pth')
+    valuation_high_priority.load_weights('valuation_nets/high_priority.pth')
 
     valuation_nets = [valuation_low_priority, valuation_high_priority]
 
@@ -307,16 +308,18 @@ def main():
 
             for i in range(trade.agent_count):
                 episode_return[i] += joint_reward[i]
-                trade_count[i] += info['new_trades_{}'.format(i)]
-                accumulated_transfer[i] += info['act_transfer_{}'.format(i)]
+                if trade.n_trade_steps > 0 and trade.trading > 0:
+                    trade_count[i] += info['new_trades_{}'.format(i)]
+                    accumulated_transfer[i] += info['act_transfer_{}'.format(i)]
 
                 q_vals[i] = agents[i].compute_q_values(observations[i])
 
             if not done:
                 info_trade = 0
-                for i in range(trade.agent_count):
-                    if info['new_trades_{}'.format(i)] != 0:
-                        info_trade = 1
+                if trade.n_trade_steps > 0 and trade.trading > 0:
+                    for i in range(trade.agent_count):
+                        if info['new_trades_{}'.format(i)] != 0:
+                            info_trade = 1
                 for i in range(3):
                     combined_frames = drawing_util.render_combined_frames(combined_frames, env, episode_return, info_trade, actions, [0, 0])
 
