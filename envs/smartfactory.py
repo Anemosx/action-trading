@@ -823,6 +823,9 @@ class Smartfactory(gym.Env):
             else:
                 observation[c_suggestions][x_sugg - x_step][y_sugg - y_step] += 1
 
+            if self.trading_signals is 0:
+                break
+
         x_pos_o = self.agents[(agent_id + 1) % 2].body.transform.position.x
         y_pos_o = self.agents[(agent_id + 1) % 2].body.transform.position.y
         x_off = 0
@@ -841,6 +844,9 @@ class Smartfactory(gym.Env):
                 y_off += y_step
             else:
                 observation[c_suggestions_other][x_sugg_o - x_step][y_sugg_o - y_step] += 1
+
+            if self.trading_signals is 0:
+                break
 
         return observation
 

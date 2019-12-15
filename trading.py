@@ -112,6 +112,7 @@ class Trade:
         trade_success = False
         act_transfer = [0, 0]
         payer = (receiver + 1) % 2
+        self.transfer[receiver] = self.transfer[receiver] * self.mark_up
 
         if self.trading_budget[payer] > 0:
             if self.trading_budget[payer] - self.transfer[receiver] < 0:
@@ -150,7 +151,7 @@ class Trade:
             action_index = 3
 
         valuation_q_vals = self.valuation_nets[priorities[receiver]].compute_q_values(observations[receiver])[0]
-        compensation = ((np.max(valuation_q_vals) - valuation_q_vals[action_index]) * self.mark_up) / self.gamma
+        compensation = (np.max(valuation_q_vals) - valuation_q_vals[action_index]) / self.gamma
 
         return compensation
 
