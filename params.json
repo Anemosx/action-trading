@@ -1,5 +1,11 @@
 {
   "nb_agents": 2,
+  "mini_batch_size": 64,
+  "warm_up_duration": 1000,
+  "buffer_capacity": 20000,
+  "target_update_period": 500,
+  "epsilon_decay": 0.000007,
+  "epsilon_min": 0.1,
   "nb_steps": 90000,
   "memory_limit": 90000,
   "eps_val_max": 1.0,

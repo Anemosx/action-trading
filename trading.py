@@ -1,7 +1,7 @@
 import numpy as np
 import agents.pytorch_agents as pta
 from copy import deepcopy
-from envs.smartfactory import Smartfactory
+import envs.smartfactory
 from common_utils.utils import export_video
 from dotmap import DotMap
 import json
@@ -103,8 +103,7 @@ class Trade:
                             info['act_transfer_{}'.format(copy_action_from)] += act_transfer[copy_action_from]
                             self.transfer[i_suggestion] = 0
 
-            if not (old_suggested_steps == self.suggested_steps):
-                observations = env.update_trade_colors(self.suggested_steps)
+            observations = env.update_trade_colors(self.suggested_steps)
 
         return rewards, observations, joint_done, info
 
@@ -155,6 +154,43 @@ class Trade:
 
         return compensation
 
+    def compensation_n_steps(self, receiver, env, observations):
+        copy_env = deepcopy(env)
+        compensation = 0
+        compensation_observation = observations
+        old_rewards = deepcopy(env.rewards)
+        total_steps_taken = 0
+
+        for i_step in range(self.n_trade_steps):
+            if len(self.suggested_steps[receiver]) != 0:
+                next_step = [self.suggested_steps[receiver][i_step*2], self.suggested_steps[receiver][i_step*2+1]]
+                compensation += self.compensation_value(receiver, next_step, copy_env.priorities, compensation_observation)
+
+                if i_step != self.n_trade_steps - 1:
+                    next_action = [-1, -1]
+
+                    action_index = -1
+                    if next_step[1] == 1.0:  # up
+                        action_index = 0
+                    if next_step[1] == -1.0:  # down
+                        action_index = 1
+                    if next_step[0] == -1.0:  # left
+                        action_index = 2
+                    if next_step[0] == 1.0:  # right
+                        action_index = 3
+
+                    next_action[receiver] = action_index
+
+                    action_other = self.valuation_nets[copy_env.priorities[(receiver + 1) % 2]].policy(compensation_observation[(receiver + 1) % 2])
+                    next_action[(receiver + 1) % 2] = action_other
+
+                    compensation_observation, rewards, joint_done, info = copy_env.step(next_action)
+                    total_steps_taken += 1
+
+        # copy_env.revert_compensation_steps()
+
+        return compensation
+
 
 def main():
     with open('params.json', 'r') as f:
@@ -166,7 +202,7 @@ def main():
 
     action_space = setup_action_space(params.trading_steps, params.trading_steps, None)
 
-    env = Smartfactory(nb_agents=params.nb_agents,
+    env = envs.smartfactory.Smartfactory(nb_agents=params.nb_agents,
                        field_width=params.field_width,
                        field_height=params.field_height,
                        rewards=params.rewards,

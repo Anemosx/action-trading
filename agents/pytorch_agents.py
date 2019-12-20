@@ -149,3 +149,17 @@ class DqnAgent:
         self.policy_net.eval()
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
+
+def make_dqn_agent(params, observation_shape, nb_actions):
+    agent = DqnAgent(
+        observation_shape=observation_shape,
+        number_of_actions=nb_actions,
+        gamma=params.gamma,
+        epsilon_decay=params.epsilon_decay,
+        epsilon_min=params.epsilon_min,
+        mini_batch_size=params.mini_batch_size,
+        warm_up_duration=params.warm_up_duration,
+        buffer_capacity=params.buffer_capacity,
+        target_update_period=params.target_update_period,
+        seed=1337)
+    return agent

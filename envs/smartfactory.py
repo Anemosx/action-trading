@@ -1,3 +1,4 @@
+import pandas as pd
 from common_utils.utils import export_video
 from rl.core import Processor
 
@@ -18,7 +19,9 @@ import json
 import os
 import scipy
 from dotmap import DotMap
+from agents.pytorch_agents import make_dqn_agent
 import agents.pytorch_agents as pta
+import trading
 
 
 INPUT_SHAPE = (84, 84, 1)
@@ -216,8 +219,8 @@ class Smartfactory(gym.Env):
             'debt_balance': (0.6078431372549019, 0.34901960784313724, 0.7137254901960784)
         }
 
-        with open('envs/actions.json', 'r') as f:
-            actions_json = json.load(f)
+        # with open('envs/actions.json', 'r') as f:
+        #     actions_json = json.load(f)
 
         self.actions = []
         self.contracting = contracting
@@ -873,80 +876,113 @@ class Smartfactory(gym.Env):
         return collision
 
 
-def main():
+def make_smart_factory(params):
 
-    with open(os.path.join('..', 'params.json'), 'r') as f:
-        params_json = json.load(f)
-    params = DotMap(params_json)
-
-    policy_random = False
-    episodes = 10
-    episode_steps = 100
+    action_space = trading.setup_action_space(params.trading_steps, params.trading_steps, None)
 
     env = Smartfactory(nb_agents=params.nb_agents,
                        field_width=params.field_width,
                        field_height=params.field_height,
                        rewards=params.rewards,
                        step_penalties=params.step_penalties,
+                       trading=params.trading,
+                       trading_steps=params.trading_steps,
+                       trading_actions=action_space,
+                       trading_signals=params.trading_signals,
                        priorities=params.priorities,
-                       contracting=2,
                        nb_machine_types=params.nb_machine_types,
+                       nb_steps_machine_inactive=params.nb_steps_machine_inactive,
                        nb_tasks=params.nb_tasks,
-                       observation=1
-                       )
+                       observation=2)
+    return env
 
-    observation_shape = list(env.observation_space.shape)
-    number_of_actions = env.action_space.n
 
-    agents = []
-    for i_ag in range(params.nb_agents):
-        ag = pta.DqnAgent(
-            observation_shape=observation_shape,
-            number_of_actions=number_of_actions,
-            gamma=0.95,
-            epsilon_decay=0.00002,
-            epsilon_min=0.0,
-            mini_batch_size=64,
-            warm_up_duration=1000,
-            buffer_capacity=20000,
-            target_update_period=2000,
-            seed=1337)
-        ag.epsilon = 0.01
-        agents.append(ag)
+def main():
 
-    for i_agent, agent in enumerate(agents):
-        agent.load_weights('/Users/kyrill/Documents/research/contracting-agents/weights.{}.pth'.format(i_agent))
+    with open(os.path.join('..', 'params.json'), 'r') as f:
+        params_json = json.load(f)
+    params = DotMap(params_json)
 
-    episodes = 10
-    episode_steps = 100
-    combined_frames = []
-    for i_episode in range(episodes):
+    episodes = 500
+    episode_steps = 500
 
-        observations = env.reset()
-        episode_rewards = np.zeros(params.nb_agents)
-        episode_contracts = 0
-        combined_frames = drawing_util.render_combined_frames(combined_frames, env, [0, 0], 0, [0, 0])
+    log_dir = 'C:/Users/Arno/contracting-agents/test_values'
+    columns = ['trading_steps', 'episode', 'reward', 'accumulated_transfer', 'number_trades', 'episode_steps', 'agent']
+    df = pd.DataFrame(columns=columns)
 
-        for i_step in range(episode_steps):
-            actions = []
-            for i_ag, agent in enumerate(agents):
-                if not env.agents[i_ag].done:
-                    action = agents[i_ag].policy(observations[i_ag])
+    for n_trading_steps in [0, 5]:
+        params.trading_steps = n_trading_steps
+        env = make_smart_factory(params)
+        observation_shape = list(env.observation_space.shape)
+        number_of_actions = env.action_space.n
+
+        agents = []
+        for i_ag in range(params.nb_agents):
+            ag = make_dqn_agent(params, observation_shape, number_of_actions)
+            ag.load_weights(os.path.join(log_dir, 'C:/Users/Arno/contracting-agents/weights/trading steps {}/weights.{}.pth'.format(n_trading_steps, i_ag)))
+            ag.epsilon = 0.01
+            agents.append(ag)
+
+        valuation_low_priority = make_dqn_agent(params, observation_shape, 4)
+        valuation_low_priority.epsilon = 0.01
+        valuation_low_priority.load_weights('C:/Users/Arno/contracting-agents/valuation_nets/low_priority.pth')
+
+        valuation_high_priority = make_dqn_agent(params, observation_shape, 4)
+        valuation_high_priority.epsilon = 0.01
+        valuation_high_priority.load_weights('C:/Users/Arno/contracting-agents/valuation_nets/high_priority.pth')
+
+        valuation_nets = [valuation_low_priority, valuation_high_priority]
+
+        trade = trading.Trade(valuation_nets=valuation_nets,
+                              agents=agents,
+                              trading=params.trading,
+                              n_trade_steps=params.trading_steps,
+                              mark_up=params.mark_up,
+                              gamma=params.gamma,
+                              pay_up_front=params.pay_up_front,
+                              trading_budget=params.trading_budget)
+
+        for i_episode in range(episodes):
+            observations = env.reset()
+            episode_rewards = np.zeros(len(env.agents))
+            trade.trading_budget = deepcopy(params.trading_budget)
+            trade_count = np.zeros(len(agents))
+            accumulated_transfer = np.zeros(len(agents))
+
+            for i_step in range(episode_steps):
+                actions = []
+                for agent_index in [0, 1]:
+                    action = agents[agent_index].policy(observations[agent_index])
                     actions.append(action)
-                else:
-                    actions.append(0)
 
-            observations, r, done, info = env.step(actions)
-            episode_rewards += r
+                joint_reward, observations, joint_done, info = trade.trading_step(episode_rewards, env, actions)
 
-            combined_frames = drawing_util.render_combined_frames(combined_frames, env, r, 0, actions)
+                for i in range(trade.agent_count):
+                    episode_rewards[i] += joint_reward[i]
+                    if trade.n_trade_steps > 0 and trade.trading > 0:
+                        trade_count[i] += info['new_trades_{}'.format(i)]
+                        accumulated_transfer[i] += info['act_transfer_{}'.format(i)]
 
-            if all([agent.done for agent in env.agents]):
-                break
+                if all([agent.done for agent in env.agents]):
+                    break
 
-        print("Episode {} contracts: {}".format(i_episode, episode_contracts))
-        print(episode_rewards)
-    export_video('Smart-Factory-Contracting.mp4', combined_frames, None)
+            print("Trading steps: " + str(params.trading_steps)
+                  + "\t|\tEpisode: " + str(i_episode)
+                  + "\t\tSteps: " + str(i_step)
+                  + "\t\tTrades: "+ str(int(np.sum(trade_count)))
+                  + "\t\tRewards: " + str(np.sum(episode_rewards)))
+
+            ep_stats = [params.trading_steps, i_episode, np.sum(episode_rewards), np.sum(accumulated_transfer), np.sum(trade_count), i_step,
+                        'overall']
+            ep_stats_a1 = [params.trading_steps, i_episode, episode_rewards[0], accumulated_transfer[0], int(trade_count[0]), i_step,
+                           'a-{}'.format(1)]
+            ep_stats_a2 = [params.trading_steps, i_episode, episode_rewards[1], accumulated_transfer[1], int(trade_count[0]), i_step,
+                           'a-{}'.format(2)]
+            df_ep = pd.DataFrame([ep_stats, ep_stats_a1, ep_stats_a2], columns=columns)
+            df = df.append(df_ep, ignore_index=True)
+
+    df.to_csv(os.path.join(log_dir, 'C:/Users/Arno/contracting-agents/test_values/trading-values.csv'))
+
 
 if __name__ == '__main__':
     main()
