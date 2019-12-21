@@ -184,6 +184,8 @@ def train_trading_dqn(agents, no_tr_agents, environment, training_episodes: int,
             logger.log_metric('episode_steps', episode_steps)
             logger.log_metric('episode_trades', np.sum(trade_count))
             logger.log_metric('accumulated_transfer', np.sum(accumulated_transfer))
+            logger.log_metric('episode_return-0', episode_return[0])
+            logger.log_metric('episode_return-1', episode_return[1])
 
             # for i in range(trade.agent_count):
             #     logger.log_metric('trades-{}'.format(i), trade_count[i])

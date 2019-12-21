@@ -22,6 +22,7 @@ from dotmap import DotMap
 from agents.pytorch_agents import make_dqn_agent
 import agents.pytorch_agents as pta
 import trading
+from datetime import datetime
 
 
 INPUT_SHAPE = (84, 84, 1)
@@ -352,7 +353,7 @@ class Smartfactory(gym.Env):
 
         self.current_suggestions = [[], []]
         self.trade_positions = []
-        if self.trading != 0 and self.trading_steps != 0:
+        if self.trading > 0 and self.trading_steps > 0:
             if self.trading_signals:
                 pos_off = 0
                 for i in range(self.trading_steps * self.nb_agents):
@@ -423,7 +424,7 @@ class Smartfactory(gym.Env):
                                             drawing_layer=0,
                                             color=(1.0, 1.0, 1.0, 0.0))
 
-        if self.trading != 0 and self.trading_steps != 0:
+        if self.trading > 0 and self.trading_steps > 0:
             for i, trade_pos in enumerate(self.trade_positions):
                 drawing_util.add_polygon_at_pos(self.display_objects,
                                                 position=(trade_pos[0], trade_pos[1]),
@@ -910,8 +911,23 @@ def main():
     columns = ['trading_steps', 'episode', 'reward', 'accumulated_transfer', 'number_trades', 'episode_steps', 'agent']
     df = pd.DataFrame(columns=columns)
 
-    for n_trading_steps in [0, 5]:
-        params.trading_steps = n_trading_steps
+    eval_list = []
+    if params.eval_mode == 0:
+        eval_list = params.eval_trading_steps
+    if params.eval_mode == 1:
+        eval_list = params.eval_trading_budget
+    if params.eval_mode == 2:
+        eval_list = params.eval_mark_up
+
+    for i_values in eval_list:
+        if params.eval_mode == 0:
+            params.trading_steps = i_values
+        if params.eval_mode == 1:
+            params.trading_budget[0] = i_values
+            params.trading_budget[1] = i_values
+        if params.eval_mode == 2:
+            params.mark_up = i_values
+
         env = make_smart_factory(params)
         observation_shape = list(env.observation_space.shape)
         number_of_actions = env.action_space.n
@@ -919,7 +935,7 @@ def main():
         agents = []
         for i_ag in range(params.nb_agents):
             ag = make_dqn_agent(params, observation_shape, number_of_actions)
-            ag.load_weights(os.path.join(log_dir, 'C:/Users/Arno/contracting-agents/weights/trading steps {}/weights.{}.pth'.format(n_trading_steps, i_ag)))
+            ag.load_weights(os.path.join(log_dir,"C:/Users/Arno/contracting-agents/new-exp/trades-{}/weights-{}.pth".format(params.trading_steps, i_ag)))
             ag.epsilon = 0.01
             agents.append(ag)
 
@@ -969,7 +985,7 @@ def main():
             print("Trading steps: " + str(params.trading_steps)
                   + "\t|\tEpisode: " + str(i_episode)
                   + "\t\tSteps: " + str(i_step)
-                  + "\t\tTrades: "+ str(int(np.sum(trade_count)))
+                  + "\t\tTrades: " + str(int(np.sum(trade_count)))
                   + "\t\tRewards: " + str(np.sum(episode_rewards)))
 
             ep_stats = [params.trading_steps, i_episode, np.sum(episode_rewards), np.sum(accumulated_transfer), np.sum(trade_count), i_step,
@@ -981,7 +997,8 @@ def main():
             df_ep = pd.DataFrame([ep_stats, ep_stats_a1, ep_stats_a2], columns=columns)
             df = df.append(df_ep, ignore_index=True)
 
-    df.to_csv(os.path.join(log_dir, 'C:/Users/Arno/contracting-agents/test_values/trading-values.csv'))
+    exp_time = datetime.now().strftime('%Y%m%d-%H-%M-%S')
+    df.to_csv(os.path.join(log_dir, 'C:/Users/Arno/contracting-agents/new-exp/csv-files/trading-values-{}.csv'.format(exp_time)))
 
 
 if __name__ == '__main__':

@@ -16,26 +16,44 @@ def main():
         params_json = json.load(f)
     params = DotMap(params_json)
 
-    if params.logging:
-        # neptune.init('kyrillschmid/contracting-agents',
-        #              api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzNTQ1ZWQwYy0zNzZiLTRmMmMtYmY0Ny0zN2MxYWQ2NDcyYzEifQ==')
+    eval_list = []
 
-        neptune.init('arno/trading-agents',
-                     api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzMDc2ZmU2YS1lYWFkLTQwNjUtOTgyMS00OTczMGU4NDYzNzcifQ==')
+    if params.eval_mode == 0:
+        eval_list = params.eval_trading_steps
+    if params.eval_mode == 1:
+        eval_list = params.eval_trading_budget
+    if params.eval_mode == 2:
+        eval_list = params.eval_mark_up
 
-        # neptune.init('Trading-Agents/Trading-Agents',
-        #              api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzMDc2ZmU2YS1lYWFkLTQwNjUtOTgyMS00OTczMGU4NDYzNzcifQ==')
+    for i_values in eval_list:
 
-        logger = neptune
-        with neptune.create_experiment(name='contracting-agents',
-                                       params=params_json):
+        if params.eval_mode == 0:
+            params.trading_steps = i_values
+        if params.eval_mode == 1:
+            params.trading_budget[0] = i_values
+            params.trading_budget[1] = i_values
+        if params.eval_mode == 2:
+            params.mark_up = i_values
 
-            exp_time = datetime.now().strftime('%Y%m%d-%H-%M-%S')
-            neptune.append_tag('pytorch-{}-trading-{}-'.format(exp_time, params.trading))
+        if params.logging:
+
+            neptune.init('arno/trading-agents',
+                         api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzMDc2ZmU2YS1lYWFkLTQwNjUtOTgyMS00OTczMGU4NDYzNzcifQ==')
+
+            # neptune.init('Trading-Agents/Trading-Agents',
+            #              api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzMDc2ZmU2YS1lYWFkLTQwNjUtOTgyMS00OTczMGU4NDYzNzcifQ==')
+
+            logger = neptune
+            with neptune.create_experiment(name='contracting-agents',
+                                           params=params_json):
+
+                neptune.append_tag('trading-steps-{}'.format(params.trading_steps))
+                neptune.append_tag('trading-budget-{}'.format(params.trading_budget[0]))
+                neptune.append_tag('mark-up-{}'.format(params.mark_up))
+                run_trade_experiment(params, logger)
+        else:
+            logger = None
             run_trade_experiment(params, logger)
-    else:
-        logger = None
-        run_trade_experiment(params, logger)
 
 
 def run_experiment(params, logger):
@@ -112,10 +130,7 @@ def run_trade_experiment(params, logger):
 
     TRAIN = True
 
-    if params.trading > 0 and params.trading_steps > 0:
-        action_space = trading.setup_action_space(params.trading_steps, params.trading_steps, None)
-    else:
-        action_space = [[0.0, 1.0], [0.0, -1.0], [-1.0, 0.0], [1.0, 0.0]]
+    action_space = trading.setup_action_space(params.trading_steps, params.trading_steps, None)
 
     env = Smartfactory(nb_agents=params.nb_agents,
                        field_width=params.field_width,
@@ -221,9 +236,9 @@ def run_trade_experiment(params, logger):
                           trading_budget=params.trading_budget)
 
     if TRAIN:
-        pytorch_training.train_trading_dqn(agents, no_tr_agents, env, 2000, params.nb_max_episode_steps, "id", logger, False, trade, params.trading_budget)
+        pytorch_training.train_trading_dqn(agents, no_tr_agents, env, 3000, params.nb_max_episode_steps, "id", logger, False, trade, params.trading_budget)
         for i_agent, agent in enumerate(agents):
-            ag.save_weights("weights.{}.pth".format(i_agent))
+            ag.save_weights("C:/Users/Arno/contracting-agents/new-exp/trades-{}/weights-{}.pth".format(params.trading_steps, i_agent))
     else:
         for i_agent, agent in enumerate(agents):
             agent.load_weights("weights.{}.pth".format(i_agent))
