@@ -1,3 +1,5 @@
+import os
+
 import agents.pytorch_agents as pta
 import pytorch_training
 import pytorch_evaluation
@@ -16,14 +18,24 @@ def main():
         params_json = json.load(f)
     params = DotMap(params_json)
 
+    exp_time = datetime.now().strftime('%Y%m%d-%H-%M-%S')
+    mode_str = ""
+
     eval_list = []
 
     if params.eval_mode == 0:
         eval_list = params.eval_trading_steps
+        mode_str = "trading steps"
     if params.eval_mode == 1:
         eval_list = params.eval_trading_budget
+        mode_str = "trading budget"
     if params.eval_mode == 2:
         eval_list = params.eval_mark_up
+        mode_str = "mark up"
+
+    log_dir = os.path.join(os.getcwd(), 'exp-trading', '{} - {}'.format(mode_str, exp_time))
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
 
     for i_values in eval_list:
 
@@ -34,6 +46,10 @@ def main():
             params.trading_budget[1] = i_values
         if params.eval_mode == 2:
             params.mark_up = i_values
+
+        log_dir_i = os.path.join(log_dir, '{} {}'.format(mode_str, i_values))
+        if not os.path.exists(log_dir_i):
+            os.makedirs(log_dir_i)
 
         if params.logging:
 
@@ -50,10 +66,10 @@ def main():
                 neptune.append_tag('trading-steps-{}'.format(params.trading_steps))
                 neptune.append_tag('trading-budget-{}'.format(params.trading_budget[0]))
                 neptune.append_tag('mark-up-{}'.format(params.mark_up))
-                run_trade_experiment(params, logger)
+                run_trade_experiment(params, logger, log_dir_i)
         else:
             logger = None
-            run_trade_experiment(params, logger)
+            run_trade_experiment(params, logger, log_dir_i)
 
 
 def run_experiment(params, logger):
@@ -126,7 +142,7 @@ def run_experiment(params, logger):
         pytorch_evaluation.evaluate(agents, env, 100, 100, 'id', False, True, False, logger)
 
 
-def run_trade_experiment(params, logger):
+def run_trade_experiment(params, logger, log_dir):
 
     TRAIN = True
 
@@ -236,9 +252,10 @@ def run_trade_experiment(params, logger):
                           trading_budget=params.trading_budget)
 
     if TRAIN:
-        pytorch_training.train_trading_dqn(agents, no_tr_agents, env, 3000, params.nb_max_episode_steps, "id", logger, False, trade, params.trading_budget)
+        pytorch_training.train_trading_dqn(agents, no_tr_agents, env, 1500, params.nb_max_episode_steps, "id", logger, False, trade, params.trading_budget)
         for i_agent, agent in enumerate(agents):
-            ag.save_weights("C:/Users/Arno/contracting-agents/new-exp/trades-{}/weights-{}.pth".format(params.trading_steps, i_agent))
+            ag.save_weights(os.path.join(log_dir, 'weights-{}.pth'.format(i_agent)))
+
     else:
         for i_agent, agent in enumerate(agents):
             agent.load_weights("weights.{}.pth".format(i_agent))

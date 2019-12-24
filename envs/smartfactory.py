@@ -904,11 +904,19 @@ def main():
         params_json = json.load(f)
     params = DotMap(params_json)
 
+    dir_str = ""
+    if params.eval_mode == 0:
+        dir_str = "trading steps"
+    if params.eval_mode == 1:
+        dir_str = "trading budget"
+    if params.eval_mode == 2:
+        dir_str = "mark up"
+
     episodes = 500
     episode_steps = 500
 
-    log_dir = 'C:/Users/Arno/contracting-agents/test_values'
-    columns = ['trading_steps', 'episode', 'reward', 'accumulated_transfer', 'number_trades', 'episode_steps', 'agent']
+    log_dir = 'C:/Users/Arno/contracting-agents/exp-trading/{} - 20191223-16-52-06/'.format(dir_str)
+    columns = ['trading_steps', 'episode', 'reward', 'accumulated_transfer', 'number_trades', 'mark_up', 'trading_budget', 'episode_steps', 'agent']
     df = pd.DataFrame(columns=columns)
 
     eval_list = []
@@ -935,7 +943,7 @@ def main():
         agents = []
         for i_ag in range(params.nb_agents):
             ag = make_dqn_agent(params, observation_shape, number_of_actions)
-            ag.load_weights(os.path.join(log_dir,"C:/Users/Arno/contracting-agents/new-exp/trades-{}/weights-{}.pth".format(params.trading_steps, i_ag)))
+            ag.load_weights(os.path.join(log_dir, "{} {}/weights-{}.pth".format(dir_str, i_values, i_ag)))
             ag.epsilon = 0.01
             agents.append(ag)
 
@@ -982,23 +990,26 @@ def main():
                 if all([agent.done for agent in env.agents]):
                     break
 
-            print("Trading steps: " + str(params.trading_steps)
+            print(dir_str + ": " + str(i_values)
                   + "\t|\tEpisode: " + str(i_episode)
                   + "\t\tSteps: " + str(i_step)
                   + "\t\tTrades: " + str(int(np.sum(trade_count)))
                   + "\t\tRewards: " + str(np.sum(episode_rewards)))
 
-            ep_stats = [params.trading_steps, i_episode, np.sum(episode_rewards), np.sum(accumulated_transfer), np.sum(trade_count), i_step,
+            ep_stats = [params.trading_steps, i_episode, np.sum(episode_rewards), np.sum(accumulated_transfer), np.sum(trade_count), params.mark_up, params.trading_budget, i_step,
                         'overall']
-            ep_stats_a1 = [params.trading_steps, i_episode, episode_rewards[0], accumulated_transfer[0], int(trade_count[0]), i_step,
+            ep_stats_a1 = [params.trading_steps, i_episode, episode_rewards[0], accumulated_transfer[0], int(trade_count[0]), params.mark_up, params.trading_budget, i_step,
                            'a-{}'.format(1)]
-            ep_stats_a2 = [params.trading_steps, i_episode, episode_rewards[1], accumulated_transfer[1], int(trade_count[0]), i_step,
+            ep_stats_a2 = [params.trading_steps, i_episode, episode_rewards[1], accumulated_transfer[1], int(trade_count[0]), params.mark_up, params.trading_budget, i_step,
                            'a-{}'.format(2)]
             df_ep = pd.DataFrame([ep_stats, ep_stats_a1, ep_stats_a2], columns=columns)
             df = df.append(df_ep, ignore_index=True)
 
+    log_dir = os.path.join(log_dir, 'csv files')
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
     exp_time = datetime.now().strftime('%Y%m%d-%H-%M-%S')
-    df.to_csv(os.path.join(log_dir, 'C:/Users/Arno/contracting-agents/new-exp/csv-files/trading-values-{}.csv'.format(exp_time)))
+    df.to_csv(os.path.join(log_dir, 'values {}.csv'.format(exp_time)))
 
 
 if __name__ == '__main__':
