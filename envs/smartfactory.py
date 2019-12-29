@@ -23,6 +23,8 @@ from agents.pytorch_agents import make_dqn_agent
 import agents.pytorch_agents as pta
 import trading
 from datetime import datetime
+from matplotlib import pyplot as plt
+import seaborn as sns
 
 
 INPUT_SHAPE = (84, 84, 1)
@@ -178,10 +180,8 @@ class Smartfactory(gym.Env):
                  step_penalties,
                  priorities,
                  learning=decentral_learning,
-                 trading=0,
                  trading_steps=0,
                  trading_actions=None,
-                 trading_signals=None,
                  contracting=0,
                  nb_machine_types=2,
                  nb_steps_machine_inactive=10,
@@ -195,9 +195,13 @@ class Smartfactory(gym.Env):
         if observation == 0:
             self.observation_space = gym.spaces.Box(0.0, 1.1, shape=(84, 84, 1))
         elif observation == 1:
-            self.observation_space = gym.spaces.Box(0.0, 1.1, shape=(8, field_width, field_height))
+            self.observation_space = gym.spaces.Box(0.0, 1.1, shape=(9, field_width, field_height))
         elif observation == 2:
-            self.observation_space = gym.spaces.Box(0.0, 1.1, shape=(10, field_width, field_height))
+            self.observation_space = gym.spaces.Box(0.0, 1.1, shape=(11, field_width, field_height))
+        elif observation == 3:
+            self.observation_space = gym.spaces.Box(0.0, 1.1, shape=(12, field_width, field_height))
+
+        self.observation_valuation_space = gym.spaces.Box(0.0, 1.1, shape=(9, field_width, field_height))
 
         self.velocity_iterations = 6
         self.position_iterations = 2
@@ -220,30 +224,22 @@ class Smartfactory(gym.Env):
             'debt_balance': (0.6078431372549019, 0.34901960784313724, 0.7137254901960784)
         }
 
-        # with open('envs/actions.json', 'r') as f:
-        #     actions_json = json.load(f)
-
-        self.actions = []
         self.contracting = contracting
-        # if contracting == 0:
-        #     self.actions = actions_json['no_contracting_action']
-        # if contracting == 1:
-        #     self.actions = actions_json['one_contracting_action']
-        # if contracting == 2:
-        #     self.actions = actions_json['two_contracting_actions']
 
-        self.trading = trading
-        self.trading_steps = trading_steps
-        self.trading_signals = trading_signals
-        self.current_suggestions = [[0], [0]]
+        self.render_mode = False
+        self.valuation_training = False
+
         self.actions = trading_actions
+        self.trading_steps = trading_steps
+        self.current_suggestions = np.zeros((nb_agents, 1), dtype=int)
+        self.missing_suggestions = np.zeros(nb_agents, dtype=int)
 
         self.actions_log = []
         self.trade_positions = []
 
         self.learning = learning
         self.nb_actions = len(self.actions)
-        self.action_space =  gym.spaces.Discrete(self.nb_actions)
+        self.action_space = gym.spaces.Discrete(self.nb_actions)
         self.nb_contracting_actions = len(self.actions)
         self.action_space = gym.spaces.Discrete(n=len(self.actions))
 
@@ -343,7 +339,10 @@ class Smartfactory(gym.Env):
         self.machines = [machines_pos_typ_0, machines_pos_typ_1]
 
         if np.sum(self.priorities) == 1:
-            self.priorities = np.random.choice([0, 1], 2, replace=False)
+            if self.valuation_training:
+                self.priorities = [1, 0]
+            else:
+                self.priorities = np.random.choice([0, 1], 2, replace=False)
 
         self.task_positions = [(-self.field_width/2 + (1 + (i * 2)),
                                 -self.field_height/2 + -1) for i in range(self.nb_tasks)]
@@ -351,20 +350,16 @@ class Smartfactory(gym.Env):
         self.debt_balance_position = [(-self.field_width/2 + 3, self.field_height/2 + 2)]
         self.greedy = []
 
-        self.current_suggestions = [[], []]
+        self.current_suggestions = np.zeros((self.nb_agents, 1), dtype=int)
+        self.missing_suggestions = np.zeros(self.nb_agents, dtype=int)
         self.trade_positions = []
-        if self.trading > 0 and self.trading_steps > 0:
-            if self.trading_signals:
-                pos_off = 0
-                for i in range(self.trading_steps * self.nb_agents):
-                    self.colors['trade-{}'.format(i)] = (1.0, 1.0, 1.0, 0.0)
-                    self.trade_positions.append((-self.field_width / 2 + 7, -self.field_height / 2 + 5 - pos_off))
-                    if i % 2 == 1:
-                        pos_off += 2
-            else:
-                for i_agents in range(self.nb_agents):
-                    self.colors['trade-{}'.format(i_agents)] = (1.0, 1.0, 1.0, 0.0)
-                    self.trade_positions.append((-self.field_width / 2 + 7, -self.field_height / 2 + 5))
+        if self.trading_steps > 0:
+            pos_off = 0
+            for i in range(self.trading_steps * self.nb_agents):
+                self.colors['trade-{}'.format(i)] = (1.0, 1.0, 1.0, 0.0)
+                self.trade_positions.append((-self.field_width / 2 + 7, -self.field_height / 2 + 5 - pos_off))
+                if i % 2 == 1:
+                    pos_off += 2
 
         for i in range(self.nb_agents):
             agent = Agent(world=self.world,
@@ -424,7 +419,7 @@ class Smartfactory(gym.Env):
                                             drawing_layer=0,
                                             color=(1.0, 1.0, 1.0, 0.0))
 
-        if self.trading > 0 and self.trading_steps > 0:
+        if self.trading_steps > 0:
             for i, trade_pos in enumerate(self.trade_positions):
                 drawing_util.add_polygon_at_pos(self.display_objects,
                                                 position=(trade_pos[0], trade_pos[1]),
@@ -450,6 +445,31 @@ class Smartfactory(gym.Env):
     def set_state(self, state):
         for agent, ag_state in zip(self.agents, state.agent_states):
             agent.set_state(ag_state=ag_state)
+
+    def store_values(self):
+        # todo deepcopy doesn't work
+        sf_values = {
+            "agents_body": deepcopy(self.get_state()),
+            "goals": deepcopy(self.goals),
+            "tasks": deepcopy(self.tasks),
+            "actions_log": deepcopy(self.actions_log),
+            "goal_positions": deepcopy(self.goal_positions),
+            "nb_steps_machine_inactive": deepcopy(self.nb_steps_machine_inactive),
+            "display_objects": deepcopy(self.display_objects),
+            "colors": deepcopy(self.colors)
+        }
+
+        return sf_values
+
+    def load_values(self, sf_values):
+        self.set_state(sf_values["agents_body"])
+        self.goals = sf_values["goals"]
+        self.tasks = sf_values["tasks"]
+        self.actions_log = sf_values["actions_log"]
+        self.goal_positions = sf_values["goal_positions"]
+        self.nb_steps_machine_inactive = sf_values["nb_steps_machine_inactive"]
+        self.display_objects = sf_values["display_objects"]
+        self.colors = sf_values["colors"]
 
     def step(self, actions):
         """
@@ -513,14 +533,39 @@ class Smartfactory(gym.Env):
             if self.observation_space.shape == (84, 84, 1):
                 observation = self.render(mode='rgb_array', agent_id=i_agent)
                 observations.append(observation)
-            elif self.observation_space.shape == (8, self.field_height, self.field_height):
+            elif self.observation_space.shape == (9, self.field_height, self.field_height):
                 observation = self.observation_one_hot(i_agent)
                 observations.append(observation)
-            elif self.observation_space.shape == (10, self.field_height, self.field_height):
+            elif self.observation_space.shape == (11, self.field_height, self.field_height):
                 observation = self.observation_trade(i_agent)
+                observations.append(observation)
+            elif self.observation_space.shape == (12, self.field_height, self.field_height):
+                observation = self.observation_trade_suggestion(i_agent)
                 observations.append(observation)
 
         return observations
+
+    def get_observation_trade(self, agent_index):
+        observation = []
+        if self.observation_space.shape == (84, 84, 1):
+            observation = self.render(mode='rgb_array', agent_id=agent_index)
+        elif self.observation_space.shape == (9, self.field_height, self.field_height):
+            observation = self.observation_one_hot(agent_index)
+        elif self.observation_space.shape == (11, self.field_height, self.field_height):
+            observation = self.observation_trade(agent_index)
+        elif self.observation_space.shape == (12, self.field_height, self.field_height):
+            observation = self.observation_trade_suggestion(agent_index)
+        return observation
+
+    def get_valuation_observation(self, agent_index):
+        observation = self.observation_one_hot(agent_index)
+        return observation
+
+    def set_render_mode(self, render_mode):
+        self.render_mode = render_mode
+
+    def set_valuation_training(self, valuation_training):
+        self.valuation_training = valuation_training
 
     def set_position(self, agent, action):
 
@@ -597,9 +642,9 @@ class Smartfactory(gym.Env):
 
     def update_trade_colors(self, suggested_steps):
         self.current_suggestions = suggested_steps
-        if self.trading_signals:
-            suggested_steps_copy = deepcopy(suggested_steps)
 
+        if self.render_mode:
+            suggested_steps_copy = deepcopy(self.current_suggestions)
             for i in range(len(suggested_steps)):
                 for i_steps in range(self.trading_steps):
                     if suggested_steps_copy[i]:
@@ -614,21 +659,14 @@ class Smartfactory(gym.Env):
                         suggested_steps_copy[i] = suggested_steps_copy[i][2:]
                     else:
                         self.colors['trade-{}'.format(i + i_steps * 2)] = (1.0, 1.0, 1.0, 0.0)
-        else:
-            for i in range(len(suggested_steps)):
-                if suggested_steps[i]:
-                    if suggested_steps[i][1] == 1.0:  # up
-                        self.colors['trade-{}'.format(i)] = (0.0, 0.0, 0.0, 1.0)
-                    if suggested_steps[i][1] == -1.0:  # down
-                        self.colors['trade-{}'.format(i)] = (0.33, 0.33, 0.33, 1.0)
-                    if suggested_steps[i][0] == -1.0:  # left
-                        self.colors['trade-{}'.format(i)] = (0.66, 0.66, 0.66, 1.0)
-                    if suggested_steps[i][0] == 1.0:  # right
-                        self.colors['trade-{}'.format(i)] = (1.0, 1.0, 1.0, 1.0)
-                else:
-                    self.colors['trade-{}'.format(i)] = (1.0, 1.0, 1.0, 0.0)
 
         return self.observation
+
+    def set_suggestions(self, suggested_steps):
+        self.current_suggestions = suggested_steps
+
+    def set_missing_suggestion(self, agent_index, nb_suggestion):
+        self.missing_suggestions[agent_index] = nb_suggestion
 
     def render(self, mode='human', close=False, info_values=None, agent_id=None, video=False):
         if mode == 'rgb_array':
@@ -667,25 +705,11 @@ class Smartfactory(gym.Env):
                             display_objects['task-{}'.format(t)][1].color = self.colors['machine-{}'.format(task)]
                     # else:
 
-                if self.trading_steps > 0 and self.trading > 0:
-                    render_trade = True
-                    for i in range(self.nb_agents):
-                        if self.agents[i].done:
-                            render_trade = False
-
-                    if self.trading_signals:
-                        for i in range(self.trading_steps * self.nb_agents):
-                            display_objects['trade-{}'.format(i)][1].color = (1.0, 1.0, 1.0, 0.0)
-                            if render_trade:
-                                if i % 2 == agent_id:
-                                    display_objects['trade-{}'.format(i)][1].color = self.colors['trade-{}'.format(i)]
-                    else:
-                        for i_agents in range(self.nb_agents):
-                            display_objects['trade-{}'.format(i_agents)][1].color = (1.0, 1.0, 1.0, 0.0)
-                            if render_trade:
-                                if i_agents % 2 == agent_id:
-                                    display_objects['trade-{}'.format(i_agents)][1].color = self.colors[
-                                        'trade-{}'.format(i_agents)]
+                if self.trading_steps > 0:
+                    for i in range(self.trading_steps * self.nb_agents):
+                        display_objects['trade-{}'.format(i)][1].color = (1.0, 1.0, 1.0, 0.0)
+                        if i % 2 == agent_id:
+                            display_objects['trade-{}'.format(i)][1].color = self.colors['trade-{}'.format(i)]
 
                 #if np.sum(self.greedy) > 0:
                 #    i = self.greedy.index(0)
@@ -707,7 +731,7 @@ class Smartfactory(gym.Env):
 
     def observation_one_hot(self, agent_id):
 
-        channels = 8
+        channels = 9
         observation = np.zeros((channels, self.field_width, self.field_height))
 
         c_active_machines = 0
@@ -717,6 +741,7 @@ class Smartfactory(gym.Env):
 
         c_pos_other = 6
         c_task_0_other = 7
+        c_done_other = 8
 
         for g in self.goals:
             x_m = int(self.map['{}-{}'.format(g.position[0], g.position[1])][0])
@@ -754,11 +779,14 @@ class Smartfactory(gym.Env):
 
         observation[c_task_prio] += self.priorities[agent_id]
 
+        if self.agents[(agent_id + 1) % 2].done:
+            observation[c_done_other] += 1
+
         return observation
 
     def observation_trade(self, agent_id):
 
-        channels = 10
+        channels = 11
         observation = np.zeros((channels, self.field_width, self.field_height))
 
         c_active_machines = 0
@@ -768,9 +796,10 @@ class Smartfactory(gym.Env):
 
         c_pos_other = 6
         c_task_0_other = 7
+        c_done_other = 8
 
-        c_suggestions = 8
-        c_suggestions_other = 9
+        c_suggestions = 9
+        c_suggestions_other = 10
 
         for g in self.goals:
             x_m = int(self.map['{}-{}'.format(g.position[0], g.position[1])][0])
@@ -827,8 +856,103 @@ class Smartfactory(gym.Env):
             else:
                 observation[c_suggestions][x_sugg - x_step][y_sugg - y_step] += 1
 
-            if self.trading_signals is 0:
-                break
+        x_pos_o = self.agents[(agent_id + 1) % 2].body.transform.position.x
+        y_pos_o = self.agents[(agent_id + 1) % 2].body.transform.position.y
+        x_off = 0
+        y_off = 0
+
+        for i_steps in range(int(len(self.current_suggestions[(agent_id + 1) % 2]) / 2)):
+            x_step = int(self.current_suggestions[(agent_id + 1) % 2][i_steps * 2])
+            y_step = int(self.current_suggestions[(agent_id + 1) % 2][i_steps * 2 + 1])
+
+            x_sugg_o = int(self.map['{}-{}'.format(x_pos_o, y_pos_o)][0]) + x_step + x_off
+            y_sugg_o = int(self.map['{}-{}'.format(x_pos_o, y_pos_o)][1]) + y_step + y_off
+
+            if 0 <= x_sugg_o < self.field_width and 0 <= y_sugg_o < self.field_height:
+                observation[c_suggestions_other][x_sugg_o][y_sugg_o] += 1
+                x_off += x_step
+                y_off += y_step
+            else:
+                observation[c_suggestions_other][x_sugg_o - x_step][y_sugg_o - y_step] += 1
+
+        if self.agents[(agent_id + 1) % 2].done:
+            observation[c_done_other] += 1
+
+        return observation
+
+    def observation_trade_suggestion(self, agent_id):
+
+        channels = 12
+        observation = np.zeros((channels, self.field_width, self.field_height))
+
+        c_active_machines = 0
+        c_pos_self = 1
+        c_task_prio = 2
+        c_tasks = [3, 4, 5]
+
+        c_action_mode = 6
+
+        c_pos_other = 7
+        c_task_0_other = 8
+        c_done_other = 9
+
+        c_suggestions = 10
+        c_suggestions_other = 11
+
+        for g in self.goals:
+            x_m = int(self.map['{}-{}'.format(g.position[0], g.position[1])][0])
+            y_m = int(self.map['{}-{}'.format(g.position[0], g.position[1])][1])
+
+            if g.inactive <= 0:
+                observation[c_active_machines][x_m][y_m] += 1
+
+        x_a_raw = self.agents[agent_id].body.transform.position.x
+        y_a_raw = self.agents[agent_id].body.transform.position.y
+        x_a = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][0])
+        y_a = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][1])
+        observation[c_pos_self][x_a][y_a] += 1
+
+        for i_task, task in enumerate(self.agents[agent_id].task):
+            for x_task_raw, y_task_raw in self.machines[task]:
+                x_task = int(self.map['{}-{}'.format(x_task_raw, y_task_raw)][0])
+                y_task = int(self.map['{}-{}'.format(x_task_raw, y_task_raw)][1])
+
+                observation[c_tasks[i_task]][x_task][y_task] += 1
+
+        # other agent
+        if len(self.agents) > 1:
+            x_a_raw = self.agents[(agent_id + 1) % 2].body.transform.position.x
+            y_a_raw = self.agents[(agent_id + 1) % 2].body.transform.position.y
+            x_a = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][0])
+            y_a = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][1])
+            observation[c_pos_other][x_a][y_a] += 1
+
+            if len(self.agents[(agent_id + 1) % 2].task) > 0:
+                for x_task_other_raw, y_task_other_raw in self.machines[self.agents[(agent_id + 1) % 2].task[0]]:
+                    x_task_other = int(self.map['{}-{}'.format(x_task_other_raw, y_task_other_raw)][0])
+                    y_task_other = int(self.map['{}-{}'.format(x_task_other_raw, y_task_other_raw)][1])
+                    observation[c_task_0_other][x_task_other][y_task_other] += 1
+
+        observation[c_task_prio] += self.priorities[agent_id]
+
+        x_pos = self.agents[agent_id].body.transform.position.x
+        y_pos = self.agents[agent_id].body.transform.position.y
+        x_off = 0
+        y_off = 0
+
+        for i_steps in range(int(len(self.current_suggestions[agent_id])/2)):
+            x_step = int(self.current_suggestions[agent_id][i_steps * 2])
+            y_step = int(self.current_suggestions[agent_id][i_steps * 2 + 1])
+
+            x_sugg = int(self.map['{}-{}'.format(x_pos, y_pos)][0]) + x_step + x_off
+            y_sugg = int(self.map['{}-{}'.format(x_pos, y_pos)][1]) + y_step + y_off
+
+            if 0 <= x_sugg < self.field_width and 0 <= y_sugg < self.field_height:
+                observation[c_suggestions][x_sugg][y_sugg] += 1
+                x_off += x_step
+                y_off += y_step
+            else:
+                observation[c_suggestions][x_sugg - x_step][y_sugg - y_step] += 1
 
         x_pos_o = self.agents[(agent_id + 1) % 2].body.transform.position.x
         y_pos_o = self.agents[(agent_id + 1) % 2].body.transform.position.y
@@ -849,8 +973,12 @@ class Smartfactory(gym.Env):
             else:
                 observation[c_suggestions_other][x_sugg_o - x_step][y_sugg_o - y_step] += 1
 
-            if self.trading_signals is 0:
-                break
+        if self.agents[(agent_id + 1) % 2].done:
+            observation[c_done_other] += 1
+
+        if self.missing_suggestions[agent_id] > 0:
+            observation[c_action_mode] += 1
+        # observation[c_action_mode] += self.missing_suggestions[agent_id]
 
         return observation
 
@@ -878,24 +1006,54 @@ class Smartfactory(gym.Env):
 
 
 def make_smart_factory(params):
+    # normal exploding action space
+    if params.trading_mode == 0:
+        action_space = trading.setup_action_space(params.trading_steps, params.trading_steps, None)
+    # split action and suggestion
+    else:
+        action_space = [[0.0, 1.0], [0.0, -1.0], [-1.0, 0.0], [1.0, 0.0]]
 
-    action_space = trading.setup_action_space(params.trading_steps, params.trading_steps, None)
+    # normal observation with exploding action space
+    observation = 2
+    # observation with suggestion action indicator
+    if params.trading_mode == 2:
+        observation = 3
+    # observation to train valuation nets
+    if params.eval_mode < 0:
+        observation = 1
 
     env = Smartfactory(nb_agents=params.nb_agents,
                        field_width=params.field_width,
                        field_height=params.field_height,
                        rewards=params.rewards,
                        step_penalties=params.step_penalties,
-                       trading=params.trading,
                        trading_steps=params.trading_steps,
                        trading_actions=action_space,
-                       trading_signals=params.trading_signals,
                        priorities=params.priorities,
                        nb_machine_types=params.nb_machine_types,
                        nb_steps_machine_inactive=params.nb_steps_machine_inactive,
                        nb_tasks=params.nb_tasks,
-                       observation=2)
+                       observation=observation)
     return env
+
+
+def make_plot(params, log_dir, exp_time):
+    plt.figure(figsize=(64, 36))
+    df = pd.read_csv(os.path.join(log_dir, 'values {}.csv'.format(exp_time)))
+    df = df.loc[-50 < df.reward]
+
+    hue_str = ""
+    if params.eval_mode == 0:
+        hue_str = "trading_steps"
+    if params.eval_mode == 1:
+        hue_str = "trading_budget"
+    if params.eval_mode == 2:
+        hue_str = "mark_up"
+
+    plot = sns.boxplot(x="agent", y="reward", hue=hue_str, data=df, palette="Set1")
+    fig = plot.get_figure()
+    fig.savefig(os.path.join(log_dir, 'hist {}.png'.format(exp_time)))
+    # plt.show()
 
 
 def main():
@@ -904,28 +1062,16 @@ def main():
         params_json = json.load(f)
     params = DotMap(params_json)
 
-    dir_str = ""
-    if params.eval_mode == 0:
-        dir_str = "trading steps"
-    if params.eval_mode == 1:
-        dir_str = "trading budget"
-    if params.eval_mode == 2:
-        dir_str = "mark up"
-
     episodes = 500
     episode_steps = 500
 
-    log_dir = 'C:/Users/Arno/contracting-agents/exp-trading/{} - 20191223-16-52-06/'.format(dir_str)
+    eval_date = '20191229-18-39-19'
+
+    mode_str, eval_list = trading.eval_mode_setup(params)
+
+    log_dir = os.path.join('..', 'exp-trading/{} - tr mode {} - {}/'.format(mode_str, params.trading_mode, eval_date))
     columns = ['trading_steps', 'episode', 'reward', 'accumulated_transfer', 'number_trades', 'mark_up', 'trading_budget', 'episode_steps', 'agent']
     df = pd.DataFrame(columns=columns)
-
-    eval_list = []
-    if params.eval_mode == 0:
-        eval_list = params.eval_trading_steps
-    if params.eval_mode == 1:
-        eval_list = params.eval_trading_budget
-    if params.eval_mode == 2:
-        eval_list = params.eval_mark_up
 
     for i_values in eval_list:
         if params.eval_mode == 0:
@@ -941,30 +1087,25 @@ def main():
         number_of_actions = env.action_space.n
 
         agents = []
+        suggestion_agents = []
+
         for i_ag in range(params.nb_agents):
             ag = make_dqn_agent(params, observation_shape, number_of_actions)
-            ag.load_weights(os.path.join(log_dir, "{} {}/weights-{}.pth".format(dir_str, i_values, i_ag)))
-            ag.epsilon = 0.01
+            ag.load_weights(os.path.join(log_dir, "{} {}/weights-{}.pth".format(mode_str, i_values, i_ag)))
+            ag.epsilon = 0.05
             agents.append(ag)
 
-        valuation_low_priority = make_dqn_agent(params, observation_shape, 4)
-        valuation_low_priority.epsilon = 0.01
-        valuation_low_priority.load_weights('C:/Users/Arno/contracting-agents/valuation_nets/low_priority.pth')
+        if params.trading_mode == 1:
+            for i_ag in range(params.nb_agents):
+                suggestion_ag = make_dqn_agent(params, observation_shape, number_of_actions)
+                suggestion_ag.load_weights(os.path.join(log_dir, "{} {}/weights-sugg-{}.pth".format(mode_str, i_values, i_ag)))
+                suggestion_ag.epsilon = 0.05
+                suggestion_agents.append(suggestion_ag)
 
-        valuation_high_priority = make_dqn_agent(params, observation_shape, 4)
-        valuation_high_priority.epsilon = 0.01
-        valuation_high_priority.load_weights('C:/Users/Arno/contracting-agents/valuation_nets/high_priority.pth')
+        if params.trading_mode == 2:
+            suggestion_agents = agents
 
-        valuation_nets = [valuation_low_priority, valuation_high_priority]
-
-        trade = trading.Trade(valuation_nets=valuation_nets,
-                              agents=agents,
-                              trading=params.trading,
-                              n_trade_steps=params.trading_steps,
-                              mark_up=params.mark_up,
-                              gamma=params.gamma,
-                              pay_up_front=params.pay_up_front,
-                              trading_budget=params.trading_budget)
+        trade = trading.Trade(env=env, params=params, agents=agents, suggestion_agents=suggestion_agents)
 
         for i_episode in range(episodes):
             observations = env.reset()
@@ -972,6 +1113,7 @@ def main():
             trade.trading_budget = deepcopy(params.trading_budget)
             trade_count = np.zeros(len(agents))
             accumulated_transfer = np.zeros(len(agents))
+            taken_steps = 0
 
             for i_step in range(episode_steps):
                 actions = []
@@ -979,37 +1121,42 @@ def main():
                     action = agents[agent_index].policy(observations[agent_index])
                     actions.append(action)
 
-                joint_reward, observations, joint_done, info = trade.trading_step(episode_rewards, env, actions)
+                joint_reward, next_observations, joint_done, new_trades, act_transfer = trade.trading_step(episode_rewards, env, actions)
 
-                for i in range(trade.agent_count):
+                observations = next_observations
+
+                taken_steps += 1
+
+                for i in range(len(agents)):
                     episode_rewards[i] += joint_reward[i]
-                    if trade.n_trade_steps > 0 and trade.trading > 0:
-                        trade_count[i] += info['new_trades_{}'.format(i)]
-                        accumulated_transfer[i] += info['act_transfer_{}'.format(i)]
+                    trade_count[i] += new_trades[i]
+                    accumulated_transfer[i] += act_transfer[i]
 
-                if all([agent.done for agent in env.agents]):
+                if joint_done.__contains__(True) or taken_steps == episode_steps:
                     break
 
-            print(dir_str + ": " + str(i_values)
+            print(mode_str + ": " + str(i_values)
                   + "\t|\tEpisode: " + str(i_episode)
-                  + "\t\tSteps: " + str(i_step)
+                  + "\t\tSteps: " + str(taken_steps)
                   + "\t\tTrades: " + str(int(np.sum(trade_count)))
                   + "\t\tRewards: " + str(np.sum(episode_rewards)))
 
-            ep_stats = [params.trading_steps, i_episode, np.sum(episode_rewards), np.sum(accumulated_transfer), np.sum(trade_count), params.mark_up, params.trading_budget, i_step,
+            ep_stats = [params.trading_steps, i_episode, np.sum(episode_rewards), np.sum(accumulated_transfer), np.sum(trade_count), params.mark_up, params.trading_budget, taken_steps,
                         'overall']
-            ep_stats_a1 = [params.trading_steps, i_episode, episode_rewards[0], accumulated_transfer[0], int(trade_count[0]), params.mark_up, params.trading_budget, i_step,
+            ep_stats_a1 = [params.trading_steps, i_episode, episode_rewards[0], accumulated_transfer[0], int(trade_count[0]), params.mark_up, params.trading_budget, taken_steps,
                            'a-{}'.format(1)]
-            ep_stats_a2 = [params.trading_steps, i_episode, episode_rewards[1], accumulated_transfer[1], int(trade_count[0]), params.mark_up, params.trading_budget, i_step,
+            ep_stats_a2 = [params.trading_steps, i_episode, episode_rewards[1], accumulated_transfer[1], int(trade_count[0]), params.mark_up, params.trading_budget, taken_steps,
                            'a-{}'.format(2)]
             df_ep = pd.DataFrame([ep_stats, ep_stats_a1, ep_stats_a2], columns=columns)
             df = df.append(df_ep, ignore_index=True)
 
-    log_dir = os.path.join(log_dir, 'csv files')
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+    log_dir_eval = os.path.join(log_dir, 'evaluation files')
+    if not os.path.exists(log_dir_eval):
+        os.makedirs(log_dir_eval)
     exp_time = datetime.now().strftime('%Y%m%d-%H-%M-%S')
-    df.to_csv(os.path.join(log_dir, 'values {}.csv'.format(exp_time)))
+    df.to_csv(os.path.join(log_dir_eval, 'values {}.csv'.format(exp_time)))
+
+    make_plot(params, log_dir_eval, exp_time)
 
 
 if __name__ == '__main__':

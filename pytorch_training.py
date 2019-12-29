@@ -115,9 +115,8 @@ def train_dqn(agents, environment, training_episodes: int, steps_per_episode: in
     print("{} | {} | training finished".format(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), scenario_id))
 
 
-def train_trading_dqn(agents, no_tr_agents, environment, training_episodes: int, steps_per_episode: int, scenario_id: str,
-              logger, plot_training_progress: bool, trade, trading_budget):
-    print("{} | {} | training started".format(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), scenario_id))
+def train_trading_dqn(agents, environment, training_episodes: int, steps_per_episode: int, logger, trade, trading_mode, trading_budget):
+    print("{} | training started".format(datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
 
     log = prepare_log(training_episodes)
 
@@ -126,7 +125,6 @@ def train_trading_dqn(agents, no_tr_agents, environment, training_episodes: int,
         done = False
         current_step = 0
         agent_indices = list(range(0, len(environment.agents)))
-        episode_steps = 0
         episode_return = np.zeros(len(environment.agents))
         joint_done = [False, False]
         trade.trading_budget = deepcopy(trading_budget)
@@ -138,19 +136,12 @@ def train_trading_dqn(agents, no_tr_agents, environment, training_episodes: int,
             actions = []
             for agent_index in agent_indices:
                 if not joint_done[agent_index]:
-                    if trade.trading == 2:
-                        tr_checks = trade.check_actions(trade.suggested_steps)
-                        if tr_checks[agent_index]:
-                            action = agents[agent_index].policy(observations[agent_index]) + 4
-                        else:
-                            action = no_tr_agents[agent_index].policy(observations[agent_index])
-                    else:
-                        action = agents[agent_index].policy(observations[agent_index])
+                    action = agents[agent_index].policy(observations[agent_index])
                 else:
                     action = np.random.randint(0, 4)
                 actions.append(action)
 
-            joint_reward, next_observations, joint_done, info = trade.trading_step(episode_return, environment, actions)
+            joint_reward, next_observations, joint_done, new_trades, act_transfer = trade.trading_step(episode_return, environment, actions)
 
             # buffer experience
             for agent_index in agent_indices:
@@ -166,32 +157,24 @@ def train_trading_dqn(agents, no_tr_agents, environment, training_episodes: int,
                     agents[agent_index].train()
 
             observations = next_observations
-
-            # finish current step
             current_step += 1
-            episode_steps += 1
 
-            for i in range(trade.agent_count):
+            for i in range(len(trade.agents)):
                 episode_return[i] += joint_reward[i]
-                if trade.n_trade_steps > 0 and trade.trading > 0:
-                    trade_count[i] += info['new_trades_{}'.format(i)]
-                    accumulated_transfer[i] += info['act_transfer_{}'.format(i)]
+                trade_count[i] += new_trades[i]
+                accumulated_transfer[i] += act_transfer[i]
 
-            done = all(done is True for done in joint_done) or current_step == steps_per_episode
+            done = joint_done.__contains__(True) or current_step == steps_per_episode
 
         if logger is not None:
             logger.log_metric('episode_return', np.sum(episode_return))
-            logger.log_metric('episode_steps', episode_steps)
+            logger.log_metric('episode_steps', current_step)
             logger.log_metric('episode_trades', np.sum(trade_count))
             logger.log_metric('accumulated_transfer', np.sum(accumulated_transfer))
-            logger.log_metric('episode_return-0', episode_return[0])
-            logger.log_metric('episode_return-1', episode_return[1])
-
-            # for i in range(trade.agent_count):
-            #     logger.log_metric('trades-{}'.format(i), trade_count[i])
-
-        # buffer results
-        # add_log_entry(log, environment, episode)
+            # logger.log_metric('episode_return-0', episode_return[0])
+            # logger.log_metric('episode_return-1', episode_return[1])
+            # logger.log_metric('trades-0', trade_count[0])
+            # logger.log_metric('trades-1', trade_count[1])
 
         # print progress every now and then
         if episode > 0 and episode % 25 is 0:
@@ -200,14 +183,7 @@ def train_trading_dqn(agents, no_tr_agents, environment, training_episodes: int,
             for agent in agents:
                 print("episode: {}, epsilon: {:.5f}, reward (fl.avg.): {:.3f}".format(episode, agent.epsilon, fl_avg_rew))
 
-    #if log_training_progress:
-    #    data.save_csv("results/{}.csv".format(scenario_id), log)
-
-    # if plot_training_progress:
-    #     plot_score(data_frame=pd.DataFrame(log), window_size=25)
-    #     plot_violations(data_frame=pd.DataFrame(log), window_size=50)
-
-    print("{} | {} | training finished".format(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), scenario_id))
+    print("{} | training finished".format(datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
 
 
 def prepare_log(training_episodes: int):
