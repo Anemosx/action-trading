@@ -447,29 +447,55 @@ class Smartfactory(gym.Env):
             agent.set_state(ag_state=ag_state)
 
     def store_values(self):
-        # todo deepcopy doesn't work
-        sf_values = {
-            "agents_body": deepcopy(self.get_state()),
-            "goals": deepcopy(self.goals),
-            "tasks": deepcopy(self.tasks),
-            "actions_log": deepcopy(self.actions_log),
-            "goal_positions": deepcopy(self.goal_positions),
-            "nb_steps_machine_inactive": deepcopy(self.nb_steps_machine_inactive),
-            "display_objects": deepcopy(self.display_objects),
-            "colors": deepcopy(self.colors)
-        }
+        agent_states = []
+        agent_tasks = []
+        agent_done = []
+        for agent in self.agents:
+            agent_states.append(deepcopy(agent.get_state()))
+            agent_tasks.append(deepcopy(agent.task))
+            agent_done.append(deepcopy(agent.done))
+
+        goals = []
+        for g in self.goals:
+            goals.append(deepcopy(g.inactive))
+
+        display_obs = [self.display_objects['agent-0'][1].color, self.display_objects['agent-1'][1].color,
+                       self.display_objects['machine-0'][1].color, self.display_objects['machine-1'][1].color,
+                       self.display_objects['machine-2'][1].color, self.display_objects['task-0'][1].color,
+                       self.display_objects['task-1'][1].color, self.display_objects['task-2'][1].color,
+                       self.display_objects['debt_balance'][1].color, self.display_objects['trade-0'][1].color,
+                       self.display_objects['trade-1'][1].color, self.display_objects['outer_field'][1].color,
+                       self.display_objects['field'][1].color]
+
+        sf_values = [agent_states, agent_tasks, agent_done, deepcopy(self.colors), deepcopy(self.current_suggestions),
+                     goals, display_obs]
 
         return sf_values
 
     def load_values(self, sf_values):
-        self.set_state(sf_values["agents_body"])
-        self.goals = sf_values["goals"]
-        self.tasks = sf_values["tasks"]
-        self.actions_log = sf_values["actions_log"]
-        self.goal_positions = sf_values["goal_positions"]
-        self.nb_steps_machine_inactive = sf_values["nb_steps_machine_inactive"]
-        self.display_objects = sf_values["display_objects"]
-        self.colors = sf_values["colors"]
+
+        for i in range(self.nb_agents):
+            self.agents[i].set_state(sf_values[0][i])
+            self.agents[i].task = sf_values[1][i]
+            self.agents[i].done = sf_values[2][i]
+        self.colors = sf_values[3]
+        self.current_suggestions = sf_values[4]
+        for i in range(len(self.goals)):
+            self.goals[i].inactive = sf_values[5][i]
+
+        self.display_objects['agent-0'][1].color = sf_values[6][0]
+        self.display_objects['agent-1'][1].color = sf_values[6][1]
+        self.display_objects['machine-0'][1].color = sf_values[6][2]
+        self.display_objects['machine-1'][1].color = sf_values[6][3]
+        self.display_objects['machine-2'][1].color = sf_values[6][4]
+        self.display_objects['task-0'][1].color = sf_values[6][5]
+        self.display_objects['task-1'][1].color = sf_values[6][6]
+        self.display_objects['task-2'][1].color = sf_values[6][7]
+        self.display_objects['debt_balance'][1].color = sf_values[6][8]
+        self.display_objects['trade-0'][1].color = sf_values[6][9]
+        self.display_objects['trade-1'][1].color = sf_values[6][10]
+        self.display_objects['outer_field'][1].color = sf_values[6][11]
+        self.display_objects['field'][1].color = sf_values[6][12]
 
     def step(self, actions):
         """
@@ -1040,7 +1066,6 @@ def make_smart_factory(params):
 def make_plot(params, log_dir, exp_time):
     plt.figure(figsize=(64, 36))
     df = pd.read_csv(os.path.join(log_dir, 'values {}.csv'.format(exp_time)))
-    df = df.loc[-50 < df.reward]
 
     hue_str = ""
     if params.eval_mode == 0:
@@ -1051,6 +1076,7 @@ def make_plot(params, log_dir, exp_time):
         hue_str = "mark_up"
 
     plot = sns.boxplot(x="agent", y="reward", hue=hue_str, data=df, palette="Set1")
+    plot.set(ylim=(-25, 0))
     fig = plot.get_figure()
     fig.savefig(os.path.join(log_dir, 'hist {}.png'.format(exp_time)))
     # plt.show()
@@ -1065,7 +1091,7 @@ def main():
     episodes = 500
     episode_steps = 500
 
-    eval_date = '20191229-18-39-19'
+    eval_date = '20191229-10-53-06'
 
     mode_str, eval_list = trading.eval_mode_setup(params)
 
@@ -1145,7 +1171,7 @@ def main():
                         'overall']
             ep_stats_a1 = [params.trading_steps, i_episode, episode_rewards[0], accumulated_transfer[0], int(trade_count[0]), params.mark_up, params.trading_budget, taken_steps,
                            'a-{}'.format(1)]
-            ep_stats_a2 = [params.trading_steps, i_episode, episode_rewards[1], accumulated_transfer[1], int(trade_count[0]), params.mark_up, params.trading_budget, taken_steps,
+            ep_stats_a2 = [params.trading_steps, i_episode, episode_rewards[1], accumulated_transfer[1], int(trade_count[1]), params.mark_up, params.trading_budget, taken_steps,
                            'a-{}'.format(2)]
             df_ep = pd.DataFrame([ep_stats, ep_stats_a1, ep_stats_a2], columns=columns)
             df = df.append(df_ep, ignore_index=True)

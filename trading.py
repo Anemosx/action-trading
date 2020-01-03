@@ -128,10 +128,14 @@ class Trade:
                             suggest = True
                     if suggest:
                         self.suggested_steps[i_agent] = deepcopy(current_actions[other_agent][1])
-                        self.transfer[i_agent] = self.compensation_value(i_agent, self.suggested_steps[i_agent][:2], env)
                         if self.pay_up_front:
+                            self.transfer[i_agent] = self.compensation_n_steps(i_agent, env)
                             rewards, act_transfer_pay, trade_success = self.pay_reward(i_agent, rewards, episode_rewards)
                             act_transfer[other_agent] += act_transfer_pay[other_agent]
+                            if not trade_success:
+                                self.suggested_steps[i_agent] = []
+                        else:
+                            self.transfer[i_agent] = self.compensation_value(i_agent, self.suggested_steps[i_agent][:2], env)
 
                 # suggestion adding with 1, separated suggestion agent 2, extra observation channel
                 elif self.trading_mode == 1 or self.trading_mode == 2:
@@ -167,7 +171,14 @@ class Trade:
 
                         suggestions_observations = suggestions_observations_after
 
-                    self.transfer[i_agent] = self.compensation_value(i_agent, self.suggested_steps[i_agent][:2], env)
+                    if self.pay_up_front:
+                        self.transfer[i_agent] = self.compensation_n_steps(i_agent, env)
+                        rewards, act_transfer_pay, trade_success = self.pay_reward(i_agent, rewards, episode_rewards)
+                        act_transfer[other_agent] += act_transfer_pay[other_agent]
+                        if not trade_success:
+                            self.suggested_steps[i_agent] = []
+                    else:
+                        self.transfer[i_agent] = self.compensation_value(i_agent, self.suggested_steps[i_agent][:2], env)
 
         if self.trading_mode == 1:
             for i_agent in range(len(self.agents)):
@@ -180,6 +191,11 @@ class Trade:
         trade_success = False
         act_transfer = np.zeros(len(self.agents))
         payer = (receiver + 1) % 2
+
+        if episode_rewards[payer] < 0:
+            self.transfer[receiver] = 0
+            return rewards, act_transfer, trade_success
+
         self.transfer[receiver] = self.transfer[receiver] * self.mark_up
 
         if self.trading_budget[payer] > 0:
@@ -191,8 +207,9 @@ class Trade:
                 rewards[receiver] += self.transfer[receiver]
                 self.trading_budget[payer] -= self.transfer[receiver]
                 act_transfer[payer] += self.transfer[receiver]
-                self.transfer[receiver] = 0
                 trade_success = True
+
+        self.transfer[receiver] = 0
 
         return rewards, act_transfer, trade_success
 
@@ -212,9 +229,8 @@ class Trade:
 
         return compensation
 
-    # todo storing and loading smartfactory
     def compensation_n_steps(self, receiver, env):
-        pre_valuation_values = env.store_values()
+        sf_values = env.store_values()
         remaining_suggestion = deepcopy(self.suggested_steps)
         compensation = self.compensation_value(receiver, remaining_suggestion[receiver][:2], env)
         observations = env.update_trade_colors(remaining_suggestion)
@@ -227,22 +243,22 @@ class Trade:
                         action = self.agents[agent_index].policy(observations[agent_index])
                     else:
                         action = -1
-                        if remaining_suggestion[1] == 1.0:  # up
+                        if remaining_suggestion[receiver][1] == 1.0:  # up
                             action = 0
-                        if remaining_suggestion[1] == -1.0:  # down
+                        if remaining_suggestion[receiver][1] == -1.0:  # down
                             action = 1
-                        if remaining_suggestion[0] == -1.0:  # left
+                        if remaining_suggestion[receiver][0] == -1.0:  # left
                             action = 2
-                        if remaining_suggestion[0] == 1.0:  # right
+                        if remaining_suggestion[receiver][0] == 1.0:  # right
                             action = 3
                 else:
                     action = np.random.randint(0, 4)
                 actions.append(action)
             observations, rewards, joint_done, info = env.step(actions)
-            remaining_suggestion = remaining_suggestion[receiver][2:]
+            remaining_suggestion[receiver] = remaining_suggestion[receiver][2:]
             compensation += self.compensation_value(receiver, remaining_suggestion[receiver][:2], env)
 
-        env.load_values(pre_valuation_values)
+        env.load_values(sf_values)
 
         return compensation
 
