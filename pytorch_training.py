@@ -164,17 +164,20 @@ def train_trading_dqn(agents, environment, training_episodes: int, steps_per_epi
                 trade_count[i] += new_trades[i]
                 accumulated_transfer[i] += act_transfer[i]
 
-            done = joint_done.__contains__(True) or current_step == steps_per_episode
+            done = all(done is True for done in joint_done) or current_step == steps_per_episode
+            #done = joint_done.__contains__(True) or current_step == steps_per_episode
 
         if logger is not None:
             logger.log_metric('episode_return', np.sum(episode_return))
             logger.log_metric('episode_steps', current_step)
             logger.log_metric('episode_trades', np.sum(trade_count))
             logger.log_metric('accumulated_transfer', np.sum(accumulated_transfer))
-            # logger.log_metric('episode_return-0', episode_return[0])
-            # logger.log_metric('episode_return-1', episode_return[1])
-            # logger.log_metric('trades-0', trade_count[0])
-            # logger.log_metric('trades-1', trade_count[1])
+            logger.log_metric('episode_return-0', episode_return[0])
+            logger.log_metric('episode_return-1', episode_return[1])
+            logger.log_metric('trades-0', trade_count[0])
+            logger.log_metric('trades-1', trade_count[1])
+            logger.log_metric('accumulated_transfer-0', accumulated_transfer[0])
+            logger.log_metric('accumulated_transfer-1', accumulated_transfer[1])
 
         # print progress every now and then
         if episode > 0 and episode % 25 is 0:

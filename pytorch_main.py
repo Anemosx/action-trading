@@ -36,6 +36,9 @@ def main():
         os.makedirs(log_dir)
 
     for i_values in eval_list:
+        if params.eval_mode == -1:
+            params.trading_steps = 0
+            params.trading_mode = 0
         if params.eval_mode == 0:
             params.trading_steps = i_values
         if params.eval_mode == 1:
@@ -60,6 +63,7 @@ def main():
             with neptune.create_experiment(name='contracting-agents',
                                            params=params_json):
 
+                neptune.append_tag('time-{}'.format(exp_time))
                 neptune.append_tag('trading-steps-{}'.format(params.trading_steps))
                 neptune.append_tag('trading-budget-{}'.format(params.trading_budget[0]))
                 neptune.append_tag('mark-up-{}'.format(params.mark_up))
@@ -155,14 +159,14 @@ def run_trade_experiment(params, logger, log_dir):
         agents.append(ag)
     if params.trading_mode == 1:
         for i_ag in range(params.nb_agents):
-            suggestion_ag = make_dqn_agent(params, observation_shape, number_of_actions)
+            suggestion_ag = make_dqn_agent(params, observation_shape, 4)
             suggestion_agents.append(suggestion_ag)
     if params.trading_mode == 2:
         suggestion_agents = agents
 
     trade = trading.Trade(env=env, params=params, agents=agents, suggestion_agents=suggestion_agents)
 
-    pytorch_training.train_trading_dqn(agents, env, 1500, params.nb_max_episode_steps, logger, trade, params.trading_mode, params.trading_budget)
+    pytorch_training.train_trading_dqn(agents, env, params.train_episodes, params.nb_max_episode_steps, logger, trade, params.trading_mode, params.trading_budget)
 
     if params.eval_mode >= 0:
         for i_agent in range(len(agents)):
@@ -171,8 +175,12 @@ def run_trade_experiment(params, logger, log_dir):
             for i_sugg_agent in range(len(suggestion_agents)):
                 suggestion_agents[i_sugg_agent].save_weights(os.path.join(log_dir, 'weights-sugg-{}.pth'.format(i_sugg_agent)))
     else:
-        agents[0].save_weights(os.path.join('high_priority.pth'))
-        agents[1].save_weights(os.path.join('low_priority.pth'))
+        val_dir = os.path.join(os.getcwd(), 'valuation_nets', 'rw {} pen {}'.format(params.rewards, params.step_penalties))
+        if not os.path.exists(val_dir):
+            os.makedirs(val_dir)
+
+        agents[0].save_weights(os.path.join(val_dir, 'low_priority.pth'))
+        agents[1].save_weights(os.path.join(val_dir, 'high_priority.pth'))
 
 
 if __name__ == '__main__':

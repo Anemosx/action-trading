@@ -61,18 +61,18 @@ class Trade:
         self.suggested_steps = [[], []]
         self.transfer = np.zeros(len(agents))
 
-        # dedicated observation for valuation
-        observation_valuation_shape = list(env.observation_valuation_space.shape)
+        if self.trading_steps > 0:
+            # dedicated observation for valuation
+            observation_valuation_shape = list(env.observation_valuation_space.shape)
 
-        valuation_low_priority = make_dqn_agent(params, observation_valuation_shape, 4)
-        valuation_low_priority.load_weights('C:/Users/' + os.environ.get('USERNAME') + '/contracting-agents/valuation_nets/low_priority.pth')
-        valuation_low_priority.epsilon = 0.05
+            valuation_low_priority = make_dqn_agent(params, observation_valuation_shape, 4)
+            valuation_low_priority.load_weights('C:/Users/' + os.environ.get(
+                'USERNAME') + '/contracting-agents/valuation_nets/rw {} pen {}/low_priority.pth'.format(params.rewards, params.step_penalties))
+            valuation_high_priority = make_dqn_agent(params, observation_valuation_shape, 4)
+            valuation_high_priority.load_weights('C:/Users/' + os.environ.get(
+                'USERNAME') + '/contracting-agents/valuation_nets/rw {} pen {}/high_priority.pth'.format(params.rewards, params.step_penalties))
 
-        valuation_high_priority = make_dqn_agent(params, observation_valuation_shape, 4)
-        valuation_high_priority.load_weights('C:/Users/' + os.environ.get('USERNAME') + '/contracting-agents/valuation_nets/high_priority.pth')
-        valuation_high_priority.epsilon = 0.05
-
-        self.valuation_nets = [valuation_low_priority, valuation_high_priority]
+            self.valuation_nets = [valuation_low_priority, valuation_high_priority]
 
     def trading_step(self, episode_rewards, env, actions):
 
@@ -82,35 +82,40 @@ class Trade:
         act_transfer = np.zeros(len(self.agents))
 
         if self.trading_steps > 0 and not joint_done.__contains__(True):
-            # compare action with suggestion
             current_actions = env.get_current_actions()
-            for i_agents in range(len(self.agents)):
-                agent_of_action = current_actions[i_agents][0]
-                other_agent = (agent_of_action + 1) % 2
-                if len(self.suggested_steps[agent_of_action]) > 0:
-                    if self.suggested_steps[agent_of_action][0] == current_actions[i_agents][1][0] and \
-                            self.suggested_steps[agent_of_action][1] == current_actions[i_agents][1][1]:
-                        self.suggested_steps[agent_of_action] = self.suggested_steps[agent_of_action][2:]
-                        if len(self.suggested_steps[agent_of_action]) == 0:
-                            if self.pay_up_front:
-                                new_trades[other_agent] += 1
-                            else:
-                                rewards, act_transfer_pay, trade_success = self.pay_reward(agent_of_action, rewards,
-                                                                                           episode_rewards)
-                                act_transfer[other_agent] += act_transfer_pay[other_agent]
-                                if trade_success:
-                                    new_trades[other_agent] += 1
-                        else:
-                            if not self.pay_up_front:
-                                self.transfer[agent_of_action] += self.compensation_value(agent_of_action, self.suggested_steps[agent_of_action][:2], env)
-                    else:
-                        self.suggested_steps[agent_of_action] = []
+
+            rewards, act_transfer, new_trades = self.action_comparison(current_actions, rewards, episode_rewards, new_trades, act_transfer)
 
             rewards, act_transfer = self.add_suggestions(current_actions, env, episode_rewards, rewards, joint_done, act_transfer)
 
             observations = env.update_trade_colors(self.suggested_steps)
 
         return rewards, observations, joint_done, new_trades, act_transfer
+
+    def action_comparison(self, current_actions, rewards, episode_rewards, new_trades, act_transfer):
+        for i_agents in range(len(self.agents)):
+            agent_of_action = current_actions[i_agents][0]
+            other_agent = (agent_of_action + 1) % 2
+            if len(self.suggested_steps[agent_of_action]) > 0:
+                if self.suggested_steps[agent_of_action][0] == current_actions[i_agents][1][0] and \
+                        self.suggested_steps[agent_of_action][1] == current_actions[i_agents][1][1]:
+                    self.suggested_steps[agent_of_action] = self.suggested_steps[agent_of_action][2:]
+                    if len(self.suggested_steps[agent_of_action]) == 0:
+                        if self.pay_up_front:
+                            new_trades[other_agent] += 1
+                        else:
+                            rewards, act_transfer_pay, trade_success = self.pay_reward(agent_of_action, rewards, episode_rewards)
+                            if trade_success:
+                                act_transfer[other_agent] += act_transfer_pay[other_agent]
+                                new_trades[other_agent] += 1
+                else:
+                    self.suggested_steps[agent_of_action] = []
+                    if self.pay_up_front:
+                        rewards[other_agent] += self.transfer[agent_of_action]
+                        rewards[agent_of_action] -= self.transfer[agent_of_action]
+                        self.transfer[agent_of_action] = 0
+
+        return rewards, act_transfer, new_trades
 
     def add_suggestions(self, current_actions, env, episode_rewards, rewards, joint_done, act_transfer):
 
@@ -128,57 +133,61 @@ class Trade:
                             suggest = True
                     if suggest:
                         self.suggested_steps[i_agent] = deepcopy(current_actions[other_agent][1])
+                        self.transfer[i_agent] = self.compensation_n_steps(i_agent, env)
+
                         if self.pay_up_front:
-                            self.transfer[i_agent] = self.compensation_n_steps(i_agent, env)
                             rewards, act_transfer_pay, trade_success = self.pay_reward(i_agent, rewards, episode_rewards)
-                            act_transfer[other_agent] += act_transfer_pay[other_agent]
                             if not trade_success:
                                 self.suggested_steps[i_agent] = []
-                        else:
-                            self.transfer[i_agent] = self.compensation_value(i_agent, self.suggested_steps[i_agent][:2], env)
+                            else:
+                                act_transfer[other_agent] += act_transfer_pay[other_agent]
+                                self.transfer[i_agent] = act_transfer_pay[other_agent]
 
                 # suggestion adding with 1, separated suggestion agent 2, extra observation channel
                 elif self.trading_mode == 1 or self.trading_mode == 2:
 
-                    if self.trading_mode == 2:
-                        env.set_missing_suggestion(other_agent, self.trading_steps)
+                    if current_actions[other_agent][1][2]:
+                        if self.trading_mode == 2:
+                            env.set_missing_suggestion(other_agent, 1)
 
-                    suggestions_observations = env.get_observation_trade(other_agent)
-                    for i_trading_steps in range(self.trading_steps):
-                        action = self.suggestion_agents[other_agent].policy(suggestions_observations)
+                        suggestions_observations = env.get_observation_trade(other_agent)
+                        for i_trading_steps in range(self.trading_steps):
+                            action = self.suggestion_agents[other_agent].policy(suggestions_observations)
 
-                        if action == 0:  # up
-                            self.suggested_steps[i_agent].extend([0.0, 1.0])
-                        if action == 1:  # down
-                            self.suggested_steps[i_agent].extend([0.0, -1.0])
-                        if action == 2:  # left
-                            self.suggested_steps[i_agent].extend([-1.0, 0.0])
-                        if action == 3:  # right
-                            self.suggested_steps[i_agent].extend([1.0, 0.0])
+                            if action % 4 == 0:  # up
+                                self.suggested_steps[i_agent].extend([0.0, 1.0])
+                            if action % 4 == 1:  # down
+                                self.suggested_steps[i_agent].extend([0.0, -1.0])
+                            if action % 4 == 2:  # left
+                                self.suggested_steps[i_agent].extend([-1.0, 0.0])
+                            if action % 4 == 3:  # right
+                                self.suggested_steps[i_agent].extend([1.0, 0.0])
 
-                        env.set_suggestions(self.suggested_steps)
+                            env.set_suggestions(self.suggested_steps)
+
+                            suggestions_observations_after = env.get_observation_trade(other_agent)
+
+                            self.suggestion_agents[other_agent].save(suggestions_observations,
+                                                                     action,
+                                                                     suggestions_observations_after,
+                                                                     rewards[other_agent],
+                                                                     joint_done[other_agent])
+
+                            suggestions_observations = suggestions_observations_after
 
                         if self.trading_mode == 2:
-                            env.set_missing_suggestion(other_agent, self.trading_steps - (i_trading_steps + 1))
+                            env.set_missing_suggestion(other_agent, 0)
 
-                        suggestions_observations_after = env.get_observation_trade(other_agent)
-
-                        self.suggestion_agents[other_agent].save(suggestions_observations,
-                                                                 action,
-                                                                 suggestions_observations_after,
-                                                                 rewards[other_agent],
-                                                                 joint_done[other_agent])
-
-                        suggestions_observations = suggestions_observations_after
-
-                    if self.pay_up_front:
                         self.transfer[i_agent] = self.compensation_n_steps(i_agent, env)
-                        rewards, act_transfer_pay, trade_success = self.pay_reward(i_agent, rewards, episode_rewards)
-                        act_transfer[other_agent] += act_transfer_pay[other_agent]
-                        if not trade_success:
-                            self.suggested_steps[i_agent] = []
-                    else:
-                        self.transfer[i_agent] = self.compensation_value(i_agent, self.suggested_steps[i_agent][:2], env)
+
+                        if self.pay_up_front:
+                            rewards, act_transfer_pay, trade_success = self.pay_reward(i_agent, rewards,
+                                                                                       episode_rewards)
+                            if not trade_success:
+                                self.suggested_steps[i_agent] = []
+                            else:
+                                act_transfer[other_agent] += act_transfer_pay[other_agent]
+                                self.transfer[i_agent] = act_transfer_pay[other_agent]
 
         if self.trading_mode == 1:
             for i_agent in range(len(self.agents)):
@@ -289,7 +298,7 @@ def main():
         agents.append(ag)
     if params.trading_mode == 1:
         for i_ag in range(params.nb_agents):
-            suggestion_ag = make_dqn_agent(params, observation_shape, number_of_actions)
+            suggestion_ag = make_dqn_agent(params, observation_shape, 4)
             if trained_agents:
                 suggestion_ag.load_weights(os.path.join(os.getcwd(), 'exp-trading/{}/{}/weights-sugg-{}.pth'.format(name_dir, agent_dir, i_ag)))
                 suggestion_ag.epsilon = 0.05
@@ -342,7 +351,8 @@ def main():
             for i in range(3):
                 combined_frames = drawing_util.render_combined_frames(combined_frames, env, episode_return, info_trade, actions, [0, 0])
 
-            done = joint_done.__contains__(True) or current_step == episode_steps
+            done = all(done is True for done in joint_done) or current_step == episode_steps
+            # done = joint_done.__contains__(True) or current_step == episode_steps
 
         print("steps: {} | rewards: {} | trades: {} | transfer: {}".format(current_step, episode_return, trade_count, accumulated_transfer))
 

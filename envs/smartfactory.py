@@ -340,7 +340,7 @@ class Smartfactory(gym.Env):
 
         if np.sum(self.priorities) == 1:
             if self.valuation_training:
-                self.priorities = [1, 0]
+                self.priorities = [0, 1]
             else:
                 self.priorities = np.random.choice([0, 1], 2, replace=False)
 
@@ -459,13 +459,16 @@ class Smartfactory(gym.Env):
         for g in self.goals:
             goals.append(deepcopy(g.inactive))
 
-        display_obs = [self.display_objects['agent-0'][1].color, self.display_objects['agent-1'][1].color,
+        if self.render_mode:
+            display_obs = [self.display_objects['agent-0'][1].color, self.display_objects['agent-1'][1].color,
                        self.display_objects['machine-0'][1].color, self.display_objects['machine-1'][1].color,
                        self.display_objects['machine-2'][1].color, self.display_objects['task-0'][1].color,
                        self.display_objects['task-1'][1].color, self.display_objects['task-2'][1].color,
                        self.display_objects['debt_balance'][1].color, self.display_objects['trade-0'][1].color,
                        self.display_objects['trade-1'][1].color, self.display_objects['outer_field'][1].color,
                        self.display_objects['field'][1].color]
+        else:
+            display_obs = []
 
         sf_values = [agent_states, agent_tasks, agent_done, deepcopy(self.colors), deepcopy(self.current_suggestions),
                      goals, display_obs]
@@ -483,19 +486,20 @@ class Smartfactory(gym.Env):
         for i in range(len(self.goals)):
             self.goals[i].inactive = sf_values[5][i]
 
-        self.display_objects['agent-0'][1].color = sf_values[6][0]
-        self.display_objects['agent-1'][1].color = sf_values[6][1]
-        self.display_objects['machine-0'][1].color = sf_values[6][2]
-        self.display_objects['machine-1'][1].color = sf_values[6][3]
-        self.display_objects['machine-2'][1].color = sf_values[6][4]
-        self.display_objects['task-0'][1].color = sf_values[6][5]
-        self.display_objects['task-1'][1].color = sf_values[6][6]
-        self.display_objects['task-2'][1].color = sf_values[6][7]
-        self.display_objects['debt_balance'][1].color = sf_values[6][8]
-        self.display_objects['trade-0'][1].color = sf_values[6][9]
-        self.display_objects['trade-1'][1].color = sf_values[6][10]
-        self.display_objects['outer_field'][1].color = sf_values[6][11]
-        self.display_objects['field'][1].color = sf_values[6][12]
+        if self.render_mode:
+            self.display_objects['agent-0'][1].color = sf_values[6][0]
+            self.display_objects['agent-1'][1].color = sf_values[6][1]
+            self.display_objects['machine-0'][1].color = sf_values[6][2]
+            self.display_objects['machine-1'][1].color = sf_values[6][3]
+            self.display_objects['machine-2'][1].color = sf_values[6][4]
+            self.display_objects['task-0'][1].color = sf_values[6][5]
+            self.display_objects['task-1'][1].color = sf_values[6][6]
+            self.display_objects['task-2'][1].color = sf_values[6][7]
+            self.display_objects['debt_balance'][1].color = sf_values[6][8]
+            self.display_objects['trade-0'][1].color = sf_values[6][9]
+            self.display_objects['trade-1'][1].color = sf_values[6][10]
+            self.display_objects['outer_field'][1].color = sf_values[6][11]
+            self.display_objects['field'][1].color = sf_values[6][12]
 
     def step(self, actions):
         """
@@ -1037,7 +1041,10 @@ def make_smart_factory(params):
         action_space = trading.setup_action_space(params.trading_steps, params.trading_steps, None)
     # split action and suggestion
     else:
-        action_space = [[0.0, 1.0], [0.0, -1.0], [-1.0, 0.0], [1.0, 0.0]]
+        # action_space = [[0.0, 1.0], [0.0, -1.0], [-1.0, 0.0], [1.0, 0.0]]
+
+        action_space = [[0.0, 1.0, 0.0], [0.0, -1.0, 0.0], [-1.0, 0.0, 0.0], [1.0, 0.0, 0.0],
+                        [0.0, 1.0, 1.0], [0.0, -1.0, 1.0], [-1.0, 0.0, 1.0], [1.0, 0.0, 1.0]]
 
     # normal observation with exploding action space
     observation = 2
@@ -1064,7 +1071,7 @@ def make_smart_factory(params):
 
 
 def make_plot(params, log_dir, exp_time):
-    plt.figure(figsize=(64, 36))
+    plt.figure(figsize=(16, 9))
     df = pd.read_csv(os.path.join(log_dir, 'values {}.csv'.format(exp_time)))
 
     hue_str = ""
@@ -1076,7 +1083,7 @@ def make_plot(params, log_dir, exp_time):
         hue_str = "mark_up"
 
     plot = sns.boxplot(x="agent", y="reward", hue=hue_str, data=df, palette="Set1")
-    plot.set(ylim=(-25, 0))
+    plot.set(ylim=(-25, 10))
     fig = plot.get_figure()
     fig.savefig(os.path.join(log_dir, 'hist {}.png'.format(exp_time)))
     # plt.show()
@@ -1091,7 +1098,7 @@ def main():
     episodes = 500
     episode_steps = 500
 
-    eval_date = '20191229-10-53-06'
+    eval_date = '20200114-16-04-05'
 
     mode_str, eval_list = trading.eval_mode_setup(params)
 
@@ -1123,7 +1130,7 @@ def main():
 
         if params.trading_mode == 1:
             for i_ag in range(params.nb_agents):
-                suggestion_ag = make_dqn_agent(params, observation_shape, number_of_actions)
+                suggestion_ag = make_dqn_agent(params, observation_shape, 4)
                 suggestion_ag.load_weights(os.path.join(log_dir, "{} {}/weights-sugg-{}.pth".format(mode_str, i_values, i_ag)))
                 suggestion_ag.epsilon = 0.05
                 suggestion_agents.append(suggestion_ag)
@@ -1183,6 +1190,8 @@ def main():
     df.to_csv(os.path.join(log_dir_eval, 'values {}.csv'.format(exp_time)))
 
     make_plot(params, log_dir_eval, exp_time)
+
+    print("finished")
 
 
 if __name__ == '__main__':
