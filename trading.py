@@ -43,6 +43,8 @@ def eval_mode_setup(params):
     if params.eval_mode == 2:
         eval_list = params.eval_mark_up
         mode_str = "mark up"
+    if params.eval_mode == -1:
+        mode_str = "val net"
 
     return mode_str, eval_list
 
@@ -60,6 +62,9 @@ class Trade:
         self.gamma = params.gamma
         self.suggested_steps = [[], []]
         self.transfer = np.zeros(len(agents))
+        self.step_transfer = [[], []]
+        self.trades = np.zeros(shape=(len(self.agents), self.trading_steps+1), dtype=int)
+        self.partial_pay = params.partial_pay
 
         if self.trading_steps > 0:
             # dedicated observation for valuation
@@ -81,12 +86,14 @@ class Trade:
         new_trades = np.zeros(len(self.agents), dtype=int)
         act_transfer = np.zeros(len(self.agents))
 
-        if self.trading_steps > 0 and not joint_done.__contains__(True):
+        if self.trading_steps > 0:
             current_actions = env.get_current_actions()
 
             rewards, act_transfer, new_trades = self.action_comparison(current_actions, rewards, episode_rewards, new_trades, act_transfer)
 
-            rewards, act_transfer = self.add_suggestions(current_actions, env, episode_rewards, rewards, joint_done, act_transfer)
+            if not joint_done.__contains__(True):
+
+                rewards, act_transfer = self.add_suggestions(current_actions, env, episode_rewards, rewards, joint_done, act_transfer)
 
             observations = env.update_trade_colors(self.suggested_steps)
 
@@ -108,12 +115,21 @@ class Trade:
                             if trade_success:
                                 act_transfer[other_agent] += act_transfer_pay[other_agent]
                                 new_trades[other_agent] += 1
+                                self.trades[other_agent][self.trading_steps] += 1
                 else:
-                    self.suggested_steps[agent_of_action] = []
                     if self.pay_up_front:
                         rewards[other_agent] += self.transfer[agent_of_action]
                         rewards[agent_of_action] -= self.transfer[agent_of_action]
                         self.transfer[agent_of_action] = 0
+                    elif self.partial_pay:
+                        nb_followed = int(self.trading_steps - len(self.suggested_steps[agent_of_action]) / 2)
+                        if nb_followed > 0:
+                            self.transfer[agent_of_action] = np.sum(self.step_transfer[agent_of_action][:nb_followed])
+                            rewards, act_transfer_pay, trade_success = self.pay_reward(agent_of_action, rewards, episode_rewards)
+                            if trade_success:
+                                act_transfer[other_agent] += act_transfer_pay[other_agent]
+                                self.trades[other_agent][nb_followed] += 1
+                    self.suggested_steps[agent_of_action] = []
 
         return rewards, act_transfer, new_trades
 
@@ -170,7 +186,7 @@ class Trade:
                             self.suggestion_agents[other_agent].save(suggestions_observations,
                                                                      action,
                                                                      suggestions_observations_after,
-                                                                     rewards[other_agent],
+                                                                     0,
                                                                      joint_done[other_agent])
 
                             suggestions_observations = suggestions_observations_after
@@ -201,7 +217,7 @@ class Trade:
         act_transfer = np.zeros(len(self.agents))
         payer = (receiver + 1) % 2
 
-        if episode_rewards[payer] < 0:
+        if episode_rewards[payer] <= 0 or self.transfer[receiver] == 0:
             self.transfer[receiver] = 0
             return rewards, act_transfer, trade_success
 
@@ -241,7 +257,8 @@ class Trade:
     def compensation_n_steps(self, receiver, env):
         sf_values = env.store_values()
         remaining_suggestion = deepcopy(self.suggested_steps)
-        compensation = self.compensation_value(receiver, remaining_suggestion[receiver][:2], env)
+        self.step_transfer[receiver] = []
+        self.step_transfer[receiver].append(self.compensation_value(receiver, remaining_suggestion[receiver][:2], env))
         observations = env.update_trade_colors(remaining_suggestion)
         joint_done = [False, False]
         for i_step in range(self.trading_steps - 1):
@@ -265,11 +282,11 @@ class Trade:
                 actions.append(action)
             observations, rewards, joint_done, info = env.step(actions)
             remaining_suggestion[receiver] = remaining_suggestion[receiver][2:]
-            compensation += self.compensation_value(receiver, remaining_suggestion[receiver][:2], env)
+            self.step_transfer[receiver].append(self.compensation_value(receiver, remaining_suggestion[receiver][:2], env))
 
         env.load_values(sf_values)
 
-        return compensation
+        return np.sum(self.step_transfer[receiver])
 
 
 def main():
@@ -277,7 +294,7 @@ def main():
         params_json = json.load(f)
     params = DotMap(params_json)
 
-    name_dir = 'trading steps - tr mode 2 - 20191229-10-53-06'
+    name_dir = 'trading steps - tr mode 2 - 20200113-18-44-21'
     agent_dir = 'trading steps 1'
 
     trained_agents = True
@@ -294,14 +311,14 @@ def main():
         ag = make_dqn_agent(params, observation_shape, number_of_actions)
         if trained_agents:
             ag.load_weights(os.path.join(os.getcwd(), 'exp-trading/{}/{}/weights-{}.pth'.format(name_dir, agent_dir, i_ag)))
-            ag.epsilon = 0.05
+            ag.epsilon = 0.01
         agents.append(ag)
     if params.trading_mode == 1:
         for i_ag in range(params.nb_agents):
             suggestion_ag = make_dqn_agent(params, observation_shape, 4)
             if trained_agents:
                 suggestion_ag.load_weights(os.path.join(os.getcwd(), 'exp-trading/{}/{}/weights-sugg-{}.pth'.format(name_dir, agent_dir, i_ag)))
-                suggestion_ag.epsilon = 0.05
+                suggestion_ag.epsilon = 0.01
             suggestion_agents.append(suggestion_ag)
     if params.trading_mode == 2:
         suggestion_agents = agents
@@ -320,6 +337,7 @@ def main():
         joint_done = [False, False]
         trade.trading_budget = deepcopy(params.trading_budget)
         trade_count = np.zeros(len(agents))
+        trade.trades = np.zeros(shape=(len(trade.agents), trade.trading_steps+1))
         accumulated_transfer = np.zeros(len(agents))
         combined_frames = drawing_util.render_combined_frames(combined_frames, env, [0, 0], 0, [0, 0])
 
@@ -351,10 +369,14 @@ def main():
             for i in range(3):
                 combined_frames = drawing_util.render_combined_frames(combined_frames, env, episode_return, info_trade, actions, [0, 0])
 
-            done = all(done is True for done in joint_done) or current_step == episode_steps
-            # done = joint_done.__contains__(True) or current_step == episode_steps
+            if not params.done_mode:
+                done = all(done is True for done in joint_done) or current_step == episode_steps
+            else:
+                done = joint_done.__contains__(True) or current_step == episode_steps
 
-        print("steps: {} | rewards: {} | trades: {} | transfer: {}".format(current_step, episode_return, trade_count, accumulated_transfer))
+        print("steps: {} | rewards: {} | complete trades: {} | transfer: {}".format(current_step, episode_return, trade_count, accumulated_transfer))
+
+        print("trades: ", trade.trades)
 
     export_video('Smart-Factory-Trading.mp4', combined_frames, None)
 

@@ -1082,7 +1082,7 @@ def make_plot(params, log_dir, exp_time):
     if params.eval_mode == 2:
         hue_str = "mark_up"
 
-    plot = sns.boxplot(x="agent", y="reward", hue=hue_str, data=df, palette="Set1")
+    plot = sns.boxplot(x="agent", y="reward", hue=hue_str, data=df, palette="Set1", showmeans=True)
     plot.set(ylim=(-25, 10))
     fig = plot.get_figure()
     fig.savefig(os.path.join(log_dir, 'hist {}.png'.format(exp_time)))
@@ -1095,15 +1095,22 @@ def main():
         params_json = json.load(f)
     params = DotMap(params_json)
 
-    episodes = 500
+    episodes = 10
     episode_steps = 500
 
-    eval_date = '20200114-16-04-05'
+    eval_date = '20200119-22-31-47'
 
     mode_str, eval_list = trading.eval_mode_setup(params)
 
-    log_dir = os.path.join('..', 'exp-trading/{} - tr mode {} - {}/'.format(mode_str, params.trading_mode, eval_date))
+    log_dir = os.path.join('..', 'exp-trading/{} - tr mode {} - {}/'.format(eval_date, params.trading_mode, mode_str))
     columns = ['trading_steps', 'episode', 'reward', 'accumulated_transfer', 'number_trades', 'mark_up', 'trading_budget', 'episode_steps', 'agent']
+
+    if params.partial_pay:
+        params.eval_mode = 0
+        eval_list = [10]
+        for i_trading_step in range(params.trading_steps+1):
+            columns.append('partial {}'.format(i_trading_step))
+
     df = pd.DataFrame(columns=columns)
 
     for i_values in eval_list:
@@ -1125,20 +1132,21 @@ def main():
         for i_ag in range(params.nb_agents):
             ag = make_dqn_agent(params, observation_shape, number_of_actions)
             ag.load_weights(os.path.join(log_dir, "{} {}/weights-{}.pth".format(mode_str, i_values, i_ag)))
-            ag.epsilon = 0.05
+            ag.epsilon = 0.01
             agents.append(ag)
 
         if params.trading_mode == 1:
             for i_ag in range(params.nb_agents):
                 suggestion_ag = make_dqn_agent(params, observation_shape, 4)
                 suggestion_ag.load_weights(os.path.join(log_dir, "{} {}/weights-sugg-{}.pth".format(mode_str, i_values, i_ag)))
-                suggestion_ag.epsilon = 0.05
+                suggestion_ag.epsilon = 0.01
                 suggestion_agents.append(suggestion_ag)
 
         if params.trading_mode == 2:
             suggestion_agents = agents
 
         trade = trading.Trade(env=env, params=params, agents=agents, suggestion_agents=suggestion_agents)
+        done_mode = params.done_mode
 
         for i_episode in range(episodes):
             observations = env.reset()
@@ -1146,12 +1154,16 @@ def main():
             trade.trading_budget = deepcopy(params.trading_budget)
             trade_count = np.zeros(len(agents))
             accumulated_transfer = np.zeros(len(agents))
+            joint_done = [False, False]
             taken_steps = 0
 
             for i_step in range(episode_steps):
                 actions = []
                 for agent_index in [0, 1]:
-                    action = agents[agent_index].policy(observations[agent_index])
+                    if not joint_done[agent_index]:
+                        action = agents[agent_index].policy(observations[agent_index])
+                    else:
+                        action = np.random.randint(0, 4)
                     actions.append(action)
 
                 joint_reward, next_observations, joint_done, new_trades, act_transfer = trade.trading_step(episode_rewards, env, actions)
@@ -1165,8 +1177,12 @@ def main():
                     trade_count[i] += new_trades[i]
                     accumulated_transfer[i] += act_transfer[i]
 
-                if joint_done.__contains__(True) or taken_steps == episode_steps:
-                    break
+                if not done_mode:
+                    if all(done is True for done in joint_done) or i_step == episode_steps:
+                        break
+                else:
+                    if joint_done.__contains__(True) or i_step == episode_steps:
+                        break
 
             print(mode_str + ": " + str(i_values)
                   + "\t|\tEpisode: " + str(i_episode)
@@ -1180,6 +1196,13 @@ def main():
                            'a-{}'.format(1)]
             ep_stats_a2 = [params.trading_steps, i_episode, episode_rewards[1], accumulated_transfer[1], int(trade_count[1]), params.mark_up, params.trading_budget, taken_steps,
                            'a-{}'.format(2)]
+
+            if params.partial_pay:
+                for i_trading_step in range(params.trading_steps+1):
+                    ep_stats.append(trade.trades[0][i_trading_step] + trade.trades[1][i_trading_step])
+                    ep_stats_a1.append(trade.trades[0][i_trading_step])
+                    ep_stats_a2.append(trade.trades[1][i_trading_step])
+
             df_ep = pd.DataFrame([ep_stats, ep_stats_a1, ep_stats_a2], columns=columns)
             df = df.append(df_ep, ignore_index=True)
 

@@ -31,14 +31,44 @@ def main():
     mode_str, eval_list = trading.eval_mode_setup(params)
 
     exp_time = datetime.now().strftime('%Y%m%d-%H-%M-%S')
-    log_dir = os.path.join(os.getcwd(), 'exp-trading', '{} - tr mode {} - {}'.format(mode_str, params.trading_mode, exp_time))
+    log_dir = os.path.join(os.getcwd(), 'exp-trading', '{} - tr mode {} - {}'.format(exp_time, params.trading_mode, mode_str))
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
+
+    params_dir = os.path.join(log_dir, 'params')
+    if not os.path.exists(params_dir):
+        os.makedirs(params_dir)
+
+    record_params = [["mark_up", params.mark_up],
+                     ["trading_mode", params.trading_mode],
+                     ["trading_steps", params.trading_steps],
+                     ["trading_budget", params.trading_budget],
+                     ["pay_up_front", params.pay_up_front],
+                     ["rewards", params.rewards],
+                     ["step_penalties", params.step_penalties],
+                     ["eval_mode", params.eval_mode],
+                     ["train_episodes", params.train_episodes],
+                     ["gamma", params.gamma],
+                     ["epsilon_decay", params.epsilon_decay],
+                     ["epsilon_min", params.epsilon_min],
+                     ["partial_pay", params.partial_pay],
+                     ["done_mode", params.done_mode]]
+
+    for i in range(len(record_params)):
+        record_params_dir = os.path.join(params_dir, '{} {}'.format(record_params[i][0], record_params[i][1]))
+        if not os.path.exists(record_params_dir):
+            os.makedirs(record_params_dir)
+
+    if params.partial_pay:
+        params.trading_steps = 10
+        params.eval_mode = 0
+        eval_list = [10]
 
     for i_values in eval_list:
         if params.eval_mode == -1:
             params.trading_steps = 0
             params.trading_mode = 0
+            params.train_episodes = 10000
         if params.eval_mode == 0:
             params.trading_steps = i_values
         if params.eval_mode == 1:
@@ -74,76 +104,6 @@ def main():
             run_trade_experiment(params, logger, log_dir_i)
 
 
-def run_experiment(params, logger):
-
-    TRAIN = True
-    env = Smartfactory(nb_agents=params.nb_agents,
-                       field_width=params.field_width,
-                       field_height=params.field_height,
-                       rewards=params.rewards,
-                       step_penalties=params.step_penalties,
-                       priorities=params.priorities,
-                       contracting=params.contracting,
-                       nb_machine_types=params.nb_machine_types,
-                       nb_steps_machine_inactive=params.nb_steps_machine_inactive,
-                       nb_tasks=params.nb_tasks,
-                       observation=1
-                       )
-
-    observation_shape = list(env.observation_space.shape)
-    number_of_actions = env.action_space.n
-
-    agents = []
-    for i_ag in range(params.nb_agents):
-        ag = pta.DqnAgent(
-            observation_shape=observation_shape,
-            number_of_actions=number_of_actions,
-            gamma=0.95,
-            epsilon_decay=0.00002,
-            epsilon_min=0.0,
-            mini_batch_size=64,
-            warm_up_duration=1000,
-            buffer_capacity=20000,
-            target_update_period=2000,
-            seed=1337)
-        agents.append(ag)
-
-    policy_net = None
-    if params.contracting > 0:
-        policy_net = pta.DqnAgent(
-            observation_shape=observation_shape,
-            number_of_actions=4,
-            gamma=0.95,
-            epsilon_decay=0.00002,
-            epsilon_min=0.0,
-            mini_batch_size=64,
-            warm_up_duration=1000,
-            buffer_capacity=20000,
-            target_update_period=2000,
-            seed=1337)
-        policy_net.epsilon = 0.01
-        policy_net.load_weights('/Users/kyrill/Documents/research/contracting-agents/weights.0.pth')
-
-    contract = Contract(policy_net=policy_net,
-                        valuation_nets=[policy_net, policy_net],
-                        contracting_target_update=params.contracting_target_update,
-                        gamma=params.gamma,
-                        nb_contracting_steps=params.nb_contracting_steps,
-                        mark_up=params.mark_up,
-                        render=False)
-
-    if TRAIN:
-        pytorch_training.train_dqn(agents, env, 1000, params.nb_max_episode_steps, "id", logger, True, contract)
-
-        for i_agent, agent in enumerate(agents):
-            ag.save_weights("weights.{}.pth".format(i_agent))
-    else:
-        for i_agent, agent in enumerate(agents):
-            agent.load_weights("weights.{}.pth".format(i_agent))
-            agent.epsilon = agent.epsilon_min  # only for dqn_agent
-        pytorch_evaluation.evaluate(agents, env, 100, 100, 'id', False, True, False, logger)
-
-
 def run_trade_experiment(params, logger, log_dir):
 
     env = make_smart_factory(params)
@@ -166,7 +126,7 @@ def run_trade_experiment(params, logger, log_dir):
 
     trade = trading.Trade(env=env, params=params, agents=agents, suggestion_agents=suggestion_agents)
 
-    pytorch_training.train_trading_dqn(agents, env, params.train_episodes, params.nb_max_episode_steps, logger, trade, params.trading_mode, params.trading_budget)
+    pytorch_training.train_trading_dqn(agents, env, params.train_episodes, params.nb_max_episode_steps, logger, trade, params.done_mode, params.trading_budget)
 
     if params.eval_mode >= 0:
         for i_agent in range(len(agents)):
