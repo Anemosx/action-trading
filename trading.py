@@ -45,6 +45,11 @@ def eval_mode_setup(params):
         mode_str = "mark up"
     if params.eval_mode == -1:
         mode_str = "val net"
+    if params.partial_pay:
+        params.eval_mode = 0
+        params.trading_steps = 10
+        eval_list = [10]
+        mode_str = "partial pay"
 
     return mode_str, eval_list
 
@@ -120,6 +125,7 @@ class Trade:
                     if self.pay_up_front:
                         rewards[other_agent] += self.transfer[agent_of_action]
                         rewards[agent_of_action] -= self.transfer[agent_of_action]
+                        act_transfer[other_agent] -= self.transfer[agent_of_action]
                         self.transfer[agent_of_action] = 0
                     elif self.partial_pay:
                         nb_followed = int(self.trading_steps - len(self.suggested_steps[agent_of_action]) / 2)
@@ -280,7 +286,8 @@ class Trade:
                 else:
                     action = np.random.randint(0, 4)
                 actions.append(action)
-            observations, rewards, joint_done, info = env.step(actions)
+            new_observations, rewards, joint_done, info = env.step(actions)
+            observations = new_observations
             remaining_suggestion[receiver] = remaining_suggestion[receiver][2:]
             self.step_transfer[receiver].append(self.compensation_value(receiver, remaining_suggestion[receiver][:2], env))
 

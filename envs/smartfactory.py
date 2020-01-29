@@ -509,6 +509,7 @@ class Smartfactory(gym.Env):
         info = copy.deepcopy(self.info)
         rewards = np.zeros(self.nb_agents)
         done = False
+        self.actions_log = []
 
         if self.learning == decentral_learning:
             joint_actions = []
@@ -1083,7 +1084,7 @@ def make_plot(params, log_dir, exp_time):
         hue_str = "mark_up"
 
     plot = sns.boxplot(x="agent", y="reward", hue=hue_str, data=df, palette="Set1", showmeans=True)
-    plot.set(ylim=(-25, 10))
+    plot.set(ylim=(-35, 10))
     fig = plot.get_figure()
     fig.savefig(os.path.join(log_dir, 'hist {}.png'.format(exp_time)))
     # plt.show()
@@ -1091,25 +1092,25 @@ def make_plot(params, log_dir, exp_time):
 
 def main():
 
-    with open(os.path.join('..', 'params.json'), 'r') as f:
+    eval_date = '20200127-18-17-42'
+
+    log_dir = os.path.join('..', 'exp-trading', '{}'.format(eval_date))
+
+    with open(os.path.join(log_dir, 'params.json'), 'r') as f:
+    # with open(os.path.join('..', 'params.json'), 'r') as f:
         params_json = json.load(f)
     params = DotMap(params_json)
 
-    episodes = 10
+    episodes = 500
     episode_steps = 500
-
-    eval_date = '20200119-22-31-47'
 
     mode_str, eval_list = trading.eval_mode_setup(params)
 
-    log_dir = os.path.join('..', 'exp-trading/{} - tr mode {} - {}/'.format(eval_date, params.trading_mode, mode_str))
     columns = ['trading_steps', 'episode', 'reward', 'accumulated_transfer', 'number_trades', 'mark_up', 'trading_budget', 'episode_steps', 'agent']
 
     if params.partial_pay:
-        params.eval_mode = 0
-        eval_list = [10]
         for i_trading_step in range(params.trading_steps+1):
-            columns.append('partial {}'.format(i_trading_step))
+            columns.append('partial_{}'.format(i_trading_step))
 
     df = pd.DataFrame(columns=columns)
 

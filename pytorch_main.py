@@ -31,44 +31,24 @@ def main():
     mode_str, eval_list = trading.eval_mode_setup(params)
 
     exp_time = datetime.now().strftime('%Y%m%d-%H-%M-%S')
-    log_dir = os.path.join(os.getcwd(), 'exp-trading', '{} - tr mode {} - {}'.format(exp_time, params.trading_mode, mode_str))
+    log_dir = os.path.join(os.getcwd(), 'exp-trading', '{}'.format(exp_time))
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
-    params_dir = os.path.join(log_dir, 'params')
+    with open(os.path.join(log_dir, 'params.json'), 'w') as outfile:
+        json.dump(params_json, outfile)
+    with open(os.path.join(log_dir, 'params.txt'), 'w') as outfile:
+        json.dump(params_json, outfile)
+
+    params_dir = os.path.join(log_dir, 'tr-mode {} mark_up {} tr_steps {} budget {} pay_up {} partial {}'.format(params.trading_mode, params.mark_up, params.trading_steps, params.trading_budget, params.pay_up_front, params.partial_pay))
     if not os.path.exists(params_dir):
         os.makedirs(params_dir)
-
-    record_params = [["mark_up", params.mark_up],
-                     ["trading_mode", params.trading_mode],
-                     ["trading_steps", params.trading_steps],
-                     ["trading_budget", params.trading_budget],
-                     ["pay_up_front", params.pay_up_front],
-                     ["rewards", params.rewards],
-                     ["step_penalties", params.step_penalties],
-                     ["eval_mode", params.eval_mode],
-                     ["train_episodes", params.train_episodes],
-                     ["gamma", params.gamma],
-                     ["epsilon_decay", params.epsilon_decay],
-                     ["epsilon_min", params.epsilon_min],
-                     ["partial_pay", params.partial_pay],
-                     ["done_mode", params.done_mode]]
-
-    for i in range(len(record_params)):
-        record_params_dir = os.path.join(params_dir, '{} {}'.format(record_params[i][0], record_params[i][1]))
-        if not os.path.exists(record_params_dir):
-            os.makedirs(record_params_dir)
-
-    if params.partial_pay:
-        params.trading_steps = 10
-        params.eval_mode = 0
-        eval_list = [10]
 
     for i_values in eval_list:
         if params.eval_mode == -1:
             params.trading_steps = 0
             params.trading_mode = 0
-            params.train_episodes = 10000
+            params.train_episodes = 2000
         if params.eval_mode == 0:
             params.trading_steps = i_values
         if params.eval_mode == 1:
