@@ -47,8 +47,8 @@ def eval_mode_setup(params):
         mode_str = "val net"
     if params.partial_pay:
         params.eval_mode = 0
-        params.trading_steps = 10
-        eval_list = [10]
+        params.trading_steps = 15
+        eval_list = [15]
         mode_str = "partial pay"
 
     return mode_str, eval_list
@@ -83,6 +83,12 @@ class Trade:
                 'USERNAME') + '/contracting-agents/valuation_nets/rw {} pen {}/high_priority.pth'.format(params.rewards, params.step_penalties))
 
             self.valuation_nets = [valuation_low_priority, valuation_high_priority]
+
+    def reset(self):
+        self.suggested_steps = [[], []]
+        self.transfer = np.zeros(len(self.agents))
+        self.step_transfer = [[], []]
+        self.trades = np.zeros(shape=(len(self.agents), self.trading_steps + 1), dtype=int)
 
     def trading_step(self, episode_rewards, env, actions):
 
@@ -223,7 +229,7 @@ class Trade:
         act_transfer = np.zeros(len(self.agents))
         payer = (receiver + 1) % 2
 
-        if episode_rewards[payer] <= 0 or self.transfer[receiver] == 0:
+        if episode_rewards[payer] < 0:
             self.transfer[receiver] = 0
             return rewards, act_transfer, trade_success
 
@@ -267,7 +273,7 @@ class Trade:
         self.step_transfer[receiver].append(self.compensation_value(receiver, remaining_suggestion[receiver][:2], env))
         observations = env.update_trade_colors(remaining_suggestion)
         joint_done = [False, False]
-        for i_step in range(self.trading_steps - 1):
+        for i_tr_step in range(self.trading_steps - 1):
             actions = []
             for agent_index in [0, 1]:
                 if not joint_done[agent_index]:
@@ -301,8 +307,8 @@ def main():
         params_json = json.load(f)
     params = DotMap(params_json)
 
-    name_dir = 'trading steps - tr mode 2 - 20200113-18-44-21'
-    agent_dir = 'trading steps 1'
+    name_dir = '20200117-22-09-38 - tr mode 2 - trading steps'
+    agent_dir = 'trading steps 2'
 
     trained_agents = True
     episodes = 1
@@ -334,9 +340,12 @@ def main():
 
     env.set_render_mode(True)
     combined_frames = []
+    frame_fig = False
 
-    for episode in range(0, episodes):
+    while not frame_fig:
+        combined_frames = []
         observations = env.reset()
+        trade.reset()
         done = False
         current_step = 0
         agent_indices = list(range(0, len(env.agents)))
@@ -375,6 +384,9 @@ def main():
                         info_trade = 1
             for i in range(3):
                 combined_frames = drawing_util.render_combined_frames(combined_frames, env, episode_return, info_trade, actions, [0, 0])
+
+            if info_trade == 1 and np.sum(joint_reward) > 0.2:
+                frame_fig = True
 
             if not params.done_mode:
                 done = all(done is True for done in joint_done) or current_step == episode_steps

@@ -47,6 +47,7 @@ def train_trading_dqn(agents, environment, training_episodes: int, steps_per_epi
 
     for episode in range(0, training_episodes):
         observations = environment.reset()
+        trade.reset()
         done = False
         current_step = 0
         agent_indices = list(range(0, len(environment.agents)))

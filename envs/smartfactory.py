@@ -1092,7 +1092,7 @@ def make_plot(params, log_dir, exp_time):
 
 def main():
 
-    eval_date = '20200127-18-17-42'
+    eval_date = '20200212-16-21-25'
 
     log_dir = os.path.join('..', 'exp-trading', '{}'.format(eval_date))
 
@@ -1101,7 +1101,7 @@ def main():
         params_json = json.load(f)
     params = DotMap(params_json)
 
-    episodes = 500
+    episodes = 2000
     episode_steps = 500
 
     mode_str, eval_list = trading.eval_mode_setup(params)
@@ -1151,6 +1151,7 @@ def main():
 
         for i_episode in range(episodes):
             observations = env.reset()
+            trade.reset()
             episode_rewards = np.zeros(len(env.agents))
             trade.trading_budget = deepcopy(params.trading_budget)
             trade_count = np.zeros(len(agents))
@@ -1191,11 +1192,11 @@ def main():
                   + "\t\tTrades: " + str(int(np.sum(trade_count)))
                   + "\t\tRewards: " + str(np.sum(episode_rewards)))
 
-            ep_stats = [params.trading_steps, i_episode, np.sum(episode_rewards), np.sum(accumulated_transfer), np.sum(trade_count), params.mark_up, params.trading_budget, taken_steps,
+            ep_stats = [params.trading_steps, i_episode, np.sum(episode_rewards), np.sum(accumulated_transfer), np.sum(trade_count), params.mark_up, np.sum(params.trading_budget)/2, taken_steps,
                         'overall']
-            ep_stats_a1 = [params.trading_steps, i_episode, episode_rewards[0], accumulated_transfer[0], int(trade_count[0]), params.mark_up, params.trading_budget, taken_steps,
+            ep_stats_a1 = [params.trading_steps, i_episode, episode_rewards[0], accumulated_transfer[0], int(trade_count[0]), params.mark_up, np.sum(params.trading_budget)/2, taken_steps,
                            'a-{}'.format(1)]
-            ep_stats_a2 = [params.trading_steps, i_episode, episode_rewards[1], accumulated_transfer[1], int(trade_count[1]), params.mark_up, params.trading_budget, taken_steps,
+            ep_stats_a2 = [params.trading_steps, i_episode, episode_rewards[1], accumulated_transfer[1], int(trade_count[1]), params.mark_up, np.sum(params.trading_budget)/2, taken_steps,
                            'a-{}'.format(2)]
 
             if params.partial_pay:
