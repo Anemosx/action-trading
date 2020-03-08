@@ -44,44 +44,45 @@ def main():
     if not os.path.exists(params_dir):
         os.makedirs(params_dir)
 
-    for i_values in eval_list:
-        if params.eval_mode == -1:
-            params.trading_steps = 0
-            params.trading_mode = 0
-            params.train_episodes = 2000
-        if params.eval_mode == 0:
-            params.trading_steps = i_values
-        if params.eval_mode == 1:
-            params.trading_budget[0] = i_values
-            params.trading_budget[1] = i_values
-        if params.eval_mode == 2:
-            params.mark_up = i_values
+    for i_times in range(params.eval_times):
+        for i_values in eval_list:
+            if params.eval_mode == -1:
+                params.trading_steps = 0
+                params.trading_mode = 0
+                params.train_episodes = 2000
+            if params.eval_mode == 0:
+                params.trading_steps = i_values
+            if params.eval_mode == 1:
+                params.trading_budget[0] = i_values
+                params.trading_budget[1] = i_values
+            if params.eval_mode == 2:
+                params.mark_up = i_values
 
-        log_dir_i = os.path.join(log_dir, '{} {}'.format(mode_str, i_values))
-        if not os.path.exists(log_dir_i):
-            os.makedirs(log_dir_i)
+            log_dir_i = os.path.join(log_dir, '{} {} {}'.format(i_times, mode_str, i_values))
+            if not os.path.exists(log_dir_i):
+                os.makedirs(log_dir_i)
 
-        if params.logging:
+            if params.logging:
 
-            neptune.init('arno/trading-agents',
-                         api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzMDc2ZmU2YS1lYWFkLTQwNjUtOTgyMS00OTczMGU4NDYzNzcifQ==')
+                neptune.init('arno/trading-agents',
+                             api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzMDc2ZmU2YS1lYWFkLTQwNjUtOTgyMS00OTczMGU4NDYzNzcifQ==')
 
-            # neptune.init('Trading-Agents/Trading-Agents',
-            #              api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzMDc2ZmU2YS1lYWFkLTQwNjUtOTgyMS00OTczMGU4NDYzNzcifQ==')
+                # neptune.init('Trading-Agents/Trading-Agents',
+                #              api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vdWkubmVwdHVuZS5tbCIsImFwaV9rZXkiOiIzMDc2ZmU2YS1lYWFkLTQwNjUtOTgyMS00OTczMGU4NDYzNzcifQ==')
 
-            logger = neptune
-            with neptune.create_experiment(name='contracting-agents',
-                                           params=params_json):
+                logger = neptune
+                with neptune.create_experiment(name='contracting-agents',
+                                               params=params_json):
 
-                neptune.append_tag('time-{}'.format(exp_time))
-                neptune.append_tag('trading-steps-{}'.format(params.trading_steps))
-                neptune.append_tag('trading-budget-{}'.format(params.trading_budget[0]))
-                neptune.append_tag('mark-up-{}'.format(params.mark_up))
-                neptune.append_tag('trading-mode-{}'.format(params.trading_mode))
+                    neptune.append_tag('time-{}'.format(exp_time))
+                    neptune.append_tag('trading-steps-{}'.format(params.trading_steps))
+                    neptune.append_tag('trading-budget-{}'.format(params.trading_budget[0]))
+                    neptune.append_tag('mark-up-{}'.format(params.mark_up))
+                    neptune.append_tag('trading-mode-{}'.format(params.trading_mode))
+                    run_trade_experiment(params, logger, log_dir_i)
+            else:
+                logger = None
                 run_trade_experiment(params, logger, log_dir_i)
-        else:
-            logger = None
-            run_trade_experiment(params, logger, log_dir_i)
 
 
 def run_trade_experiment(params, logger, log_dir):

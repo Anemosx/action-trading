@@ -856,9 +856,9 @@ class Smartfactory(gym.Env):
         if len(self.agents) > 1:
             x_a_raw = self.agents[(agent_id + 1) % 2].body.transform.position.x
             y_a_raw = self.agents[(agent_id + 1) % 2].body.transform.position.y
-            x_a = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][0])
-            y_a = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][1])
-            observation[c_pos_other][x_a][y_a] += 1
+            x_a_o = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][0])
+            y_a_o = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][1])
+            observation[c_pos_other][x_a_o][y_a_o] += 1
 
             if len(self.agents[(agent_id + 1) % 2].task) > 0:
                 for x_task_other_raw, y_task_other_raw in self.machines[self.agents[(agent_id + 1) % 2].task[0]]:
@@ -868,43 +868,40 @@ class Smartfactory(gym.Env):
 
         observation[c_task_prio] += self.priorities[agent_id]
 
-        x_pos = self.agents[agent_id].body.transform.position.x
-        y_pos = self.agents[agent_id].body.transform.position.y
-        x_off = 0
-        y_off = 0
+        x_sugg = x_a
+        y_sugg = y_a
 
-        for i_steps in range(int(len(self.current_suggestions[agent_id])/2)):
+        for i_steps in range(int(len(self.current_suggestions[agent_id]) / 2)):
             x_step = int(self.current_suggestions[agent_id][i_steps * 2])
             y_step = int(self.current_suggestions[agent_id][i_steps * 2 + 1])
 
-            x_sugg = int(self.map['{}-{}'.format(x_pos, y_pos)][0]) + x_step + x_off
-            y_sugg = int(self.map['{}-{}'.format(x_pos, y_pos)][1]) + y_step + y_off
+            x_sugg += x_step
+            y_sugg += y_step
 
             if 0 <= x_sugg < self.field_width and 0 <= y_sugg < self.field_height:
                 observation[c_suggestions][x_sugg][y_sugg] += 1
-                x_off += x_step
-                y_off += y_step
             else:
-                observation[c_suggestions][x_sugg - x_step][y_sugg - y_step] += 1
+                x_sugg -= x_step
+                y_sugg -= y_step
+                observation[c_suggestions][x_sugg][y_sugg] += 1
 
-        x_pos_o = self.agents[(agent_id + 1) % 2].body.transform.position.x
-        y_pos_o = self.agents[(agent_id + 1) % 2].body.transform.position.y
-        x_off = 0
-        y_off = 0
+        if len(self.agents) > 1:
+            x_sugg_o = x_a_o
+            y_sugg_o = y_a_o
 
-        for i_steps in range(int(len(self.current_suggestions[(agent_id + 1) % 2]) / 2)):
-            x_step = int(self.current_suggestions[(agent_id + 1) % 2][i_steps * 2])
-            y_step = int(self.current_suggestions[(agent_id + 1) % 2][i_steps * 2 + 1])
+            for i_steps in range(int(len(self.current_suggestions[(agent_id + 1) % 2]) / 2)):
+                x_step = int(self.current_suggestions[(agent_id + 1) % 2][i_steps * 2])
+                y_step = int(self.current_suggestions[(agent_id + 1) % 2][i_steps * 2 + 1])
 
-            x_sugg_o = int(self.map['{}-{}'.format(x_pos_o, y_pos_o)][0]) + x_step + x_off
-            y_sugg_o = int(self.map['{}-{}'.format(x_pos_o, y_pos_o)][1]) + y_step + y_off
+                x_sugg_o += x_step
+                y_sugg_o += y_step
 
-            if 0 <= x_sugg_o < self.field_width and 0 <= y_sugg_o < self.field_height:
-                observation[c_suggestions_other][x_sugg_o][y_sugg_o] += 1
-                x_off += x_step
-                y_off += y_step
-            else:
-                observation[c_suggestions_other][x_sugg_o - x_step][y_sugg_o - y_step] += 1
+                if 0 <= x_sugg_o < self.field_width and 0 <= y_sugg_o < self.field_height:
+                    observation[c_suggestions_other][x_sugg_o][y_sugg_o] += 1
+                else:
+                    x_sugg_o -= x_step
+                    y_sugg_o -= y_step
+                    observation[c_suggestions_other][x_sugg_o][y_sugg_o] += 1
 
         if self.agents[(agent_id + 1) % 2].done:
             observation[c_done_other] += 1
@@ -954,9 +951,9 @@ class Smartfactory(gym.Env):
         if len(self.agents) > 1:
             x_a_raw = self.agents[(agent_id + 1) % 2].body.transform.position.x
             y_a_raw = self.agents[(agent_id + 1) % 2].body.transform.position.y
-            x_a = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][0])
-            y_a = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][1])
-            observation[c_pos_other][x_a][y_a] += 1
+            x_a_o = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][0])
+            y_a_o = int(self.map['{}-{}'.format(x_a_raw, y_a_raw)][1])
+            observation[c_pos_other][x_a_o][y_a_o] += 1
 
             if len(self.agents[(agent_id + 1) % 2].task) > 0:
                 for x_task_other_raw, y_task_other_raw in self.machines[self.agents[(agent_id + 1) % 2].task[0]]:
@@ -966,43 +963,40 @@ class Smartfactory(gym.Env):
 
         observation[c_task_prio] += self.priorities[agent_id]
 
-        x_pos = self.agents[agent_id].body.transform.position.x
-        y_pos = self.agents[agent_id].body.transform.position.y
-        x_off = 0
-        y_off = 0
+        x_sugg = x_a
+        y_sugg = y_a
 
-        for i_steps in range(int(len(self.current_suggestions[agent_id])/2)):
+        for i_steps in range(int(len(self.current_suggestions[agent_id]) / 2)):
             x_step = int(self.current_suggestions[agent_id][i_steps * 2])
             y_step = int(self.current_suggestions[agent_id][i_steps * 2 + 1])
 
-            x_sugg = int(self.map['{}-{}'.format(x_pos, y_pos)][0]) + x_step + x_off
-            y_sugg = int(self.map['{}-{}'.format(x_pos, y_pos)][1]) + y_step + y_off
+            x_sugg += x_step
+            y_sugg += y_step
 
             if 0 <= x_sugg < self.field_width and 0 <= y_sugg < self.field_height:
                 observation[c_suggestions][x_sugg][y_sugg] += 1
-                x_off += x_step
-                y_off += y_step
             else:
-                observation[c_suggestions][x_sugg - x_step][y_sugg - y_step] += 1
+                x_sugg -= x_step
+                y_sugg -= y_step
+                observation[c_suggestions][x_sugg][y_sugg] += 1
 
-        x_pos_o = self.agents[(agent_id + 1) % 2].body.transform.position.x
-        y_pos_o = self.agents[(agent_id + 1) % 2].body.transform.position.y
-        x_off = 0
-        y_off = 0
+        if len(self.agents) > 1:
+            x_sugg_o = x_a_o
+            y_sugg_o = y_a_o
 
-        for i_steps in range(int(len(self.current_suggestions[(agent_id + 1) % 2]) / 2)):
-            x_step = int(self.current_suggestions[(agent_id + 1) % 2][i_steps * 2])
-            y_step = int(self.current_suggestions[(agent_id + 1) % 2][i_steps * 2 + 1])
+            for i_steps in range(int(len(self.current_suggestions[(agent_id + 1) % 2]) / 2)):
+                x_step = int(self.current_suggestions[(agent_id + 1) % 2][i_steps * 2])
+                y_step = int(self.current_suggestions[(agent_id + 1) % 2][i_steps * 2 + 1])
 
-            x_sugg_o = int(self.map['{}-{}'.format(x_pos_o, y_pos_o)][0]) + x_step + x_off
-            y_sugg_o = int(self.map['{}-{}'.format(x_pos_o, y_pos_o)][1]) + y_step + y_off
+                x_sugg_o += x_step
+                y_sugg_o += y_step
 
-            if 0 <= x_sugg_o < self.field_width and 0 <= y_sugg_o < self.field_height:
-                observation[c_suggestions_other][x_sugg_o][y_sugg_o] += 1
-                x_off += x_step
-                y_off += y_step
-            else:
-                observation[c_suggestions_other][x_sugg_o - x_step][y_sugg_o - y_step] += 1
+                if 0 <= x_sugg_o < self.field_width and 0 <= y_sugg_o < self.field_height:
+                    observation[c_suggestions_other][x_sugg_o][y_sugg_o] += 1
+                else:
+                    x_sugg_o -= x_step
+                    y_sugg_o -= y_step
+                    observation[c_suggestions_other][x_sugg_o][y_sugg_o] += 1
 
         if self.agents[(agent_id + 1) % 2].done:
             observation[c_done_other] += 1
@@ -1092,7 +1086,7 @@ def make_plot(params, log_dir, exp_time):
 
 def main():
 
-    eval_date = '20200212-16-21-25'
+    eval_date = '20200306-21-10-09'
 
     log_dir = os.path.join('..', 'exp-trading', '{}'.format(eval_date))
 
@@ -1106,7 +1100,7 @@ def main():
 
     mode_str, eval_list = trading.eval_mode_setup(params)
 
-    columns = ['trading_steps', 'episode', 'reward', 'accumulated_transfer', 'number_trades', 'mark_up', 'trading_budget', 'episode_steps', 'agent']
+    columns = ['trading_steps', 'episode', 'reward', 'accumulated_transfer', 'number_trades', 'mark_up', 'trading_budget', 'episode_steps', 'agent', 'eval_id']
 
     if params.partial_pay:
         for i_trading_step in range(params.trading_steps+1):
@@ -1114,99 +1108,105 @@ def main():
 
     df = pd.DataFrame(columns=columns)
 
-    for i_values in eval_list:
-        if params.eval_mode == 0:
-            params.trading_steps = i_values
-        if params.eval_mode == 1:
-            params.trading_budget[0] = i_values
-            params.trading_budget[1] = i_values
-        if params.eval_mode == 2:
-            params.mark_up = i_values
+    for i_times in range(params.eval_times):
+        for i_values in eval_list:
+            if params.eval_mode == 0:
+                params.trading_steps = i_values
+            if params.eval_mode == 1:
+                params.trading_budget[0] = i_values
+                params.trading_budget[1] = i_values
+            if params.eval_mode == 2:
+                params.mark_up = i_values
 
-        env = make_smart_factory(params)
-        observation_shape = list(env.observation_space.shape)
-        number_of_actions = env.action_space.n
+            env = make_smart_factory(params)
+            observation_shape = list(env.observation_space.shape)
+            number_of_actions = env.action_space.n
 
-        agents = []
-        suggestion_agents = []
+            agents = []
+            suggestion_agents = []
 
-        for i_ag in range(params.nb_agents):
-            ag = make_dqn_agent(params, observation_shape, number_of_actions)
-            ag.load_weights(os.path.join(log_dir, "{} {}/weights-{}.pth".format(mode_str, i_values, i_ag)))
-            ag.epsilon = 0.01
-            agents.append(ag)
-
-        if params.trading_mode == 1:
             for i_ag in range(params.nb_agents):
-                suggestion_ag = make_dqn_agent(params, observation_shape, 4)
-                suggestion_ag.load_weights(os.path.join(log_dir, "{} {}/weights-sugg-{}.pth".format(mode_str, i_values, i_ag)))
-                suggestion_ag.epsilon = 0.01
-                suggestion_agents.append(suggestion_ag)
+                ag = make_dqn_agent(params, observation_shape, number_of_actions)
+                ag.load_weights(os.path.join(log_dir, "{} {} {}/weights-{}.pth".format(i_times, mode_str, i_values, i_ag)))
+                ag.epsilon = 0.01
+                agents.append(ag)
 
-        if params.trading_mode == 2:
-            suggestion_agents = agents
+            if params.trading_mode == 1:
+                for i_ag in range(params.nb_agents):
+                    suggestion_ag = make_dqn_agent(params, observation_shape, 4)
+                    suggestion_ag.load_weights(
+                        os.path.join(log_dir, "{} {} {}/weights-sugg-{}.pth".format(i_times, mode_str, i_values, i_ag)))
+                    suggestion_ag.epsilon = 0.01
+                    suggestion_agents.append(suggestion_ag)
 
-        trade = trading.Trade(env=env, params=params, agents=agents, suggestion_agents=suggestion_agents)
-        done_mode = params.done_mode
+            if params.trading_mode == 2:
+                suggestion_agents = agents
 
-        for i_episode in range(episodes):
-            observations = env.reset()
-            trade.reset()
-            episode_rewards = np.zeros(len(env.agents))
-            trade.trading_budget = deepcopy(params.trading_budget)
-            trade_count = np.zeros(len(agents))
-            accumulated_transfer = np.zeros(len(agents))
-            joint_done = [False, False]
-            taken_steps = 0
+            trade = trading.Trade(env=env, params=params, agents=agents, suggestion_agents=suggestion_agents)
+            done_mode = params.done_mode
 
-            for i_step in range(episode_steps):
-                actions = []
-                for agent_index in [0, 1]:
-                    if not joint_done[agent_index]:
-                        action = agents[agent_index].policy(observations[agent_index])
+            for i_episode in range(episodes):
+                observations = env.reset()
+                trade.reset()
+                episode_rewards = np.zeros(len(env.agents))
+                trade.trading_budget = deepcopy(params.trading_budget)
+                trade_count = np.zeros(len(agents))
+                accumulated_transfer = np.zeros(len(agents))
+                joint_done = [False, False]
+                taken_steps = 0
+
+                for i_step in range(episode_steps):
+                    actions = []
+                    for agent_index in [0, 1]:
+                        if not joint_done[agent_index]:
+                            action = agents[agent_index].policy(observations[agent_index])
+                        else:
+                            action = np.random.randint(0, 4)
+                        actions.append(action)
+
+                    joint_reward, next_observations, joint_done, new_trades, act_transfer = trade.trading_step(
+                        episode_rewards, env, actions)
+
+                    observations = next_observations
+
+                    taken_steps += 1
+
+                    for i in range(len(agents)):
+                        episode_rewards[i] += joint_reward[i]
+                        trade_count[i] += new_trades[i]
+                        accumulated_transfer[i] += act_transfer[i]
+
+                    if not done_mode:
+                        if all(done is True for done in joint_done) or i_step == episode_steps:
+                            break
                     else:
-                        action = np.random.randint(0, 4)
-                    actions.append(action)
+                        if joint_done.__contains__(True) or i_step == episode_steps:
+                            break
 
-                joint_reward, next_observations, joint_done, new_trades, act_transfer = trade.trading_step(episode_rewards, env, actions)
+                print(str(i_times) + " " + mode_str + ": " + str(i_values)
+                      + "\t|\tEpisode: " + str(i_episode)
+                      + "\t\tSteps: " + str(taken_steps)
+                      + "\t\tTrades: " + str(int(np.sum(trade_count)))
+                      + "\t\tRewards: " + str(np.sum(episode_rewards)))
 
-                observations = next_observations
+                ep_stats = [params.trading_steps, i_episode, np.sum(episode_rewards), np.sum(accumulated_transfer),
+                            np.sum(trade_count), params.mark_up, np.sum(params.trading_budget) / 2, taken_steps,
+                            'overall', i_times]
+                ep_stats_a1 = [params.trading_steps, i_episode, episode_rewards[0], accumulated_transfer[0],
+                               int(trade_count[0]), params.mark_up, np.sum(params.trading_budget) / 2, taken_steps,
+                               'a-{}'.format(1), i_times]
+                ep_stats_a2 = [params.trading_steps, i_episode, episode_rewards[1], accumulated_transfer[1],
+                               int(trade_count[1]), params.mark_up, np.sum(params.trading_budget) / 2, taken_steps,
+                               'a-{}'.format(2), i_times]
 
-                taken_steps += 1
+                if params.partial_pay:
+                    for i_trading_step in range(params.trading_steps + 1):
+                        ep_stats.append(trade.trades[0][i_trading_step] + trade.trades[1][i_trading_step])
+                        ep_stats_a1.append(trade.trades[0][i_trading_step])
+                        ep_stats_a2.append(trade.trades[1][i_trading_step])
 
-                for i in range(len(agents)):
-                    episode_rewards[i] += joint_reward[i]
-                    trade_count[i] += new_trades[i]
-                    accumulated_transfer[i] += act_transfer[i]
-
-                if not done_mode:
-                    if all(done is True for done in joint_done) or i_step == episode_steps:
-                        break
-                else:
-                    if joint_done.__contains__(True) or i_step == episode_steps:
-                        break
-
-            print(mode_str + ": " + str(i_values)
-                  + "\t|\tEpisode: " + str(i_episode)
-                  + "\t\tSteps: " + str(taken_steps)
-                  + "\t\tTrades: " + str(int(np.sum(trade_count)))
-                  + "\t\tRewards: " + str(np.sum(episode_rewards)))
-
-            ep_stats = [params.trading_steps, i_episode, np.sum(episode_rewards), np.sum(accumulated_transfer), np.sum(trade_count), params.mark_up, np.sum(params.trading_budget)/2, taken_steps,
-                        'overall']
-            ep_stats_a1 = [params.trading_steps, i_episode, episode_rewards[0], accumulated_transfer[0], int(trade_count[0]), params.mark_up, np.sum(params.trading_budget)/2, taken_steps,
-                           'a-{}'.format(1)]
-            ep_stats_a2 = [params.trading_steps, i_episode, episode_rewards[1], accumulated_transfer[1], int(trade_count[1]), params.mark_up, np.sum(params.trading_budget)/2, taken_steps,
-                           'a-{}'.format(2)]
-
-            if params.partial_pay:
-                for i_trading_step in range(params.trading_steps+1):
-                    ep_stats.append(trade.trades[0][i_trading_step] + trade.trades[1][i_trading_step])
-                    ep_stats_a1.append(trade.trades[0][i_trading_step])
-                    ep_stats_a2.append(trade.trades[1][i_trading_step])
-
-            df_ep = pd.DataFrame([ep_stats, ep_stats_a1, ep_stats_a2], columns=columns)
-            df = df.append(df_ep, ignore_index=True)
+                df_ep = pd.DataFrame([ep_stats, ep_stats_a1, ep_stats_a2], columns=columns)
+                df = df.append(df_ep, ignore_index=True)
 
     log_dir_eval = os.path.join(log_dir, 'evaluation files')
     if not os.path.exists(log_dir_eval):
