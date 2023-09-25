@@ -39,3 +39,5 @@ agents are more likely to cooperate if they pay afterwards.
 [Presentation](https://github.com/Anemosx/action-trading/blob/trading/action_trading_pres.pdf)
 
 [Full Thesis](https://github.com/Anemosx/action-trading/blob/trading/action_trading.pdf)
+
+![action_trading_plot](https://github.com/Anemosx/action-trading/blob/trading/smart_factory_trading_plot.png?raw=true)
