@@ -41,3 +41,18 @@ agents are more likely to cooperate if they pay afterwards.
 [Full Thesis](https://github.com/Anemosx/action-trading/blob/trading/action_trading.pdf)
 
 ![action_trading_plot](https://github.com/Anemosx/action-trading/blob/trading/smart_factory_trading_plot.png?raw=true)
+
+## Citation
+
+If you find this work useful, please cite it as follows:
+
+```bibtex
+@misc{unterauer2020marl,
+      title={Action Trading for Self-Interested Multi-Agent Reinforcement Learning in a Smart Factory Setting}, 
+      author={Arnold Unterauer},
+      year={2020},
+      eprint={},
+      archivePrefix={},
+      primaryClass={},
+      url={https://github.com/Anemosx/action-trading} 
+}
